@@ -120,6 +120,17 @@ body::-webkit-scrollbar {
   display: none;
 }
 
+/* Vaul portalt naar body en valt daardoor niet binnen .app-viewport. Geef ook
+   overlays en sheets dezelfde door ons gemeten iOS-onderkant; bij een correcte
+   browserviewport komt deze correctie exact op nul uit. */
+.app-drawer-overlay {
+  height: var(--app-viewport-height, 100dvh);
+}
+
+.app-drawer-content {
+  bottom: calc(100vh - var(--app-viewport-height, 100vh));
+}
+
 * {
   border-color: var(--color-line);
 }

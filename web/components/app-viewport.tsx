@@ -12,19 +12,31 @@ export function AppViewport({ children }: { children: React.ReactNode }) {
   const scroller = React.useRef<HTMLDivElement>(null);
   const previousPath = React.useRef(pathname);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const syncVisualViewport = () => {
+      if (document.visibilityState === "hidden") return;
+
       const visualViewport = window.visualViewport;
       const visualBottom = visualViewport
         ? visualViewport.height + visualViewport.offsetTop
+        : 0;
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+      const portrait = window.matchMedia("(orientation: portrait)").matches;
+      const screenExtent = standalone
+        ? portrait
+          ? Math.max(window.screen.width, window.screen.height)
+          : Math.min(window.screen.width, window.screen.height)
         : 0;
       const height = Math.max(
         document.documentElement.clientHeight,
         window.innerHeight,
         visualBottom,
+        screenExtent,
       );
 
-      viewport.current?.style.setProperty(
+      document.documentElement.style.setProperty(
         "--app-viewport-height",
         `${Math.round(height)}px`,
       );
@@ -59,6 +71,7 @@ export function AppViewport({ children }: { children: React.ReactNode }) {
       document.removeEventListener("visibilitychange", syncVisualViewport);
       window.visualViewport?.removeEventListener("resize", syncVisualViewport);
       window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
+      document.documentElement.style.removeProperty("--app-viewport-height");
     };
   }, []);
 
