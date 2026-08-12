@@ -33,7 +33,6 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn("app-drawer-content fixed inset-x-0 bottom-0 z-[70] mx-auto flex max-h-[90vh] max-w-lg flex-col rounded-t-[24px] border-t border-line-strong bg-s1 outline-none", className)}
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         {...props}
       >
         <DrawerPrimitive.Handle

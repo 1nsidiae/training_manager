@@ -128,6 +128,17 @@ body::-webkit-scrollbar {
   align-self: end;
 }
 
+/* De scrolllaag bezit zelf de home-indicatorruimte. Padding op de buitenste
+   Vaul-sheet kan buiten de gecorrigeerde iOS-viewport vallen en maakt dan de
+   laatste regel onbereikbaar. Met min-height: 0 krimpt deze flex-child echt en
+   de extra 2rem geeft de laatste tekst een rustige, native eindmarge. */
+.app-drawer-content > .overflow-y-auto {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* WebKit bug 236445: in een geïnstalleerde PWA met black-translucent eindigt
    de layoutviewport één safe-area-inset-top te vroeg. Compenseer exact die
    door WebKit gerapporteerde fout in de rootbox, vóór de eerste paint. Geen
