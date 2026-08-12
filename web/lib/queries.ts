@@ -464,6 +464,10 @@ export type SessionFeedback = {
   created_at: string;
 };
 
+export type RecentTrainingFeedback = SessionFeedback & {
+  session: Pick<PlanSession, "id" | "day" | "title" | "session_type" | "status" | "targets"> | null;
+};
+
 export async function getActivities(limit = 30) {
   const sb = await createClient();
   const { data } = await sb
@@ -705,6 +709,40 @@ export async function getActivityFeedback(ids: number[]) {
     if (row.activity_id != null && !out.has(row.activity_id)) out.set(row.activity_id, row);
   }
   return out;
+}
+
+/** Laatste zelfrapportages met de bijbehorende doelcontrole. Dit is de
+ * menselijke laag van de pre-workout check: Garmin ziet belasting, maar niet
+ * of een training pijnlijk of buitensporig zwaar aanvoelde. */
+export async function getRecentTrainingFeedback(limit = 6): Promise<RecentTrainingFeedback[]> {
+  const sb = await createClient();
+  const { data } = await sb
+    .from("session_feedback")
+    .select(
+      "id, plan_session_id, activity_id, pain_score, endurance_score, extra, notes, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const feedback = (data ?? []) as SessionFeedback[];
+  const sessionIds = feedback
+    .map((item) => item.plan_session_id)
+    .filter((id): id is number => id != null);
+
+  const sessions = new Map<number, RecentTrainingFeedback["session"]>();
+  if (sessionIds.length) {
+    const { data: sessionRows } = await sb
+      .from("plan_sessions")
+      .select("id, day, title, session_type, status, targets")
+      .in("id", sessionIds);
+    for (const row of sessionRows ?? []) {
+      sessions.set(row.id, row as RecentTrainingFeedback["session"]);
+    }
+  }
+
+  return feedback.map((item) => ({
+    ...item,
+    session: item.plan_session_id == null ? null : sessions.get(item.plan_session_id) ?? null,
+  }));
 }
 
 export async function getCoachRuns(limit = 20) {

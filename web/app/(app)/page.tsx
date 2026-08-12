@@ -12,8 +12,10 @@ import { StructureBar } from "@/components/structure-bar";
 import { TodayHeader } from "@/components/today-header";
 import { PlanApproval } from "@/components/plan-approval";
 import { PlanImpactCard } from "@/components/plan-impact-card";
+import { PreWorkoutCheckCard } from "@/components/pre-workout-check";
 import { TrainingLoadCard } from "@/components/training-load-card";
 import { comparePlans } from "@/lib/plan-comparison";
+import { buildPreWorkoutCheck } from "@/lib/pre-workout";
 import {
   getActivePlan,
   getAdjustments,
@@ -25,6 +27,7 @@ import {
   getPlanSessions,
   getPreviousPlan,
   getProposedPlan,
+  getRecentTrainingFeedback,
   getRuleParams,
   getTrainingLoadSummary,
   getWellnessWindow,
@@ -97,6 +100,7 @@ export default async function TodayPage({
     trainingLoad,
     impactActivitySource,
     planSync,
+    recentFeedback,
   ] =
     await Promise.all([
       plan ? getPlanSessions(plan.id) : Promise.resolve([]),
@@ -112,6 +116,7 @@ export default async function TodayPage({
       getTrainingLoadSummary(selectedDay),
       plan ? getPlanActivitySource(plan) : Promise.resolve(null),
       plan ? getPlanApplySync(plan.id) : Promise.resolve(null),
+      getRecentTrainingFeedback(),
     ]);
   const proposedChanges = comparePlans(proposedSessions, sessions);
   const latestPlanChanges = comparePlans(sessions, previousSessions);
@@ -182,6 +187,17 @@ export default async function TodayPage({
 
   const recentSeries = series.slice(-14);
   const meta = session ? SESSION_META[session.session_type] : null;
+  const preWorkoutCheck =
+    session && session.day === selectedDay && session.session_type !== "rest"
+      ? buildPreWorkoutCheck({
+          session,
+          selectedDay,
+          wellness,
+          trainingLoad,
+          feedback: recentFeedback,
+          rules,
+        })
+      : null;
   const steps = session?.structure?.steps ?? [];
   const sessionPace =
     paceTarget(
@@ -317,6 +333,10 @@ export default async function TodayPage({
           sessions={sessions}
           sync={planSync}
         />
+      ) : null}
+
+      {session && preWorkoutCheck ? (
+        <PreWorkoutCheckCard check={preWorkoutCheck} session={session} />
       ) : null}
 
       <section aria-labelledby="training-heading">
