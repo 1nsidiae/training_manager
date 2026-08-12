@@ -104,7 +104,10 @@ body::-webkit-scrollbar {
   background-color: var(--color-canvas);
   background-image: linear-gradient(180deg, #283339 0%, #101518 38%, #101518 100%);
   background-repeat: no-repeat;
-  background-size: 100% 100dvh;
+  /* Bewust niet 100dvh: bij het openen van de PWA rekent iOS dvh nog met een te
+     korte viewport, en dan bleef er onderaan een ongeschilderde strook staan.
+     De eigen hoogte van dit element is per definitie precies één scherm. */
+  background-size: 100% 100%;
 }
 
 .app-scroll {

@@ -30,13 +30,33 @@ export function AppViewport({ children }: { children: React.ReactNode }) {
       );
     };
 
+    /* Bij het openen van een standalone PWA klopt de eerste meting niet: iOS
+       geeft dan nog een hoogte zonder de onderste safe-area terug en stuurt
+       daarna géén resize. Zonder hermeten bleef die verkeerde waarde staan tot
+       je het toestel draaide — dat is precies waarom roteren en terugdraaien het
+       "repareerde". Daarom meten we een paar keer opnieuw tot het beeld staat. */
+    const timers = [0, 120, 400, 1000].map((delay) =>
+      window.setTimeout(syncVisualViewport, delay),
+    );
+    const frame = requestAnimationFrame(() =>
+      requestAnimationFrame(syncVisualViewport),
+    );
+
+    // pageshow vuurt ook wanneer iOS de app uit de achtergrond terughaalt;
+    // visibilitychange vangt het terugkeren naar de app zonder herstart.
+    const events = ["resize", "orientationchange", "pageshow"] as const;
+
     syncVisualViewport();
-    window.addEventListener("resize", syncVisualViewport);
+    for (const event of events) window.addEventListener(event, syncVisualViewport);
+    document.addEventListener("visibilitychange", syncVisualViewport);
     window.visualViewport?.addEventListener("resize", syncVisualViewport);
     window.visualViewport?.addEventListener("scroll", syncVisualViewport);
 
     return () => {
-      window.removeEventListener("resize", syncVisualViewport);
+      timers.forEach(window.clearTimeout);
+      cancelAnimationFrame(frame);
+      for (const event of events) window.removeEventListener(event, syncVisualViewport);
+      document.removeEventListener("visibilitychange", syncVisualViewport);
       window.visualViewport?.removeEventListener("resize", syncVisualViewport);
       window.visualViewport?.removeEventListener("scroll", syncVisualViewport);
     };
