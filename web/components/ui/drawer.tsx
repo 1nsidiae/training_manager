@@ -5,11 +5,18 @@ import { Drawer as DrawerPrimitive } from "vaul";
 import { cn } from "@/lib/utils";
 
 function Drawer(props: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root {...props} shouldScaleBackground={false} handleOnly />;
+  return (
+    <DrawerPrimitive.Root
+      {...props}
+      shouldScaleBackground={false}
+      handleOnly
+      dismissible
+    />
+  );
 }
 
 function DrawerNested(props: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) {
-  return <DrawerPrimitive.NestedRoot {...props} handleOnly />;
+  return <DrawerPrimitive.NestedRoot {...props} handleOnly dismissible />;
 }
 
 const DrawerTrigger = DrawerPrimitive.Trigger;
@@ -30,8 +37,20 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
         {...props}
       >
         <DrawerPrimitive.Handle
-          className="mt-2.5 shrink-0"
-          style={{ width: 40, height: 4, opacity: 1, backgroundColor: "var(--color-s3)" }}
+          preventCycle
+          className="shrink-0"
+          style={{
+            width: "100%",
+            height: 32,
+            marginTop: 0,
+            opacity: 1,
+            borderRadius: 0,
+            backgroundColor: "transparent",
+            backgroundImage: "linear-gradient(var(--color-s3), var(--color-s3))",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "40px 4px",
+          }}
         />
         {children}
       </DrawerPrimitive.Content>
