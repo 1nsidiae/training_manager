@@ -156,6 +156,18 @@ body::-webkit-scrollbar {
     bottom: calc(0px - env(safe-area-inset-top, 0px));
     max-height: calc(90vh + env(safe-area-inset-top, 0px));
   }
+
+  /* De sheet is hierboven bewust één top-inset onder de CSS-viewport
+     doorgetrokken. Reserveer diezelfde lengte onderaan in de scroller, anders
+     verdwijnt onze gewone eindmarge samen met de laatste tekst buiten beeld. */
+  .app-drawer-content > .overflow-y-auto {
+    padding-bottom: calc(
+      2rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
+    );
+    scroll-padding-bottom: calc(
+      2rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
+    );
+  }
 }
 
 * {
