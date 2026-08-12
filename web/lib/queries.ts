@@ -176,6 +176,25 @@ export type PlanSyncLog = {
   finished_at: string | null;
 };
 
+export type CoachMessage = {
+  id: number;
+  user_id: string;
+  role: "user" | "assistant";
+  content: string;
+  intent: "question" | "report" | "plan_review";
+  metadata: {
+    needs_plan_review?: boolean;
+    review_reason?: string;
+    safety_note?: string;
+    model?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    cost_usd?: number;
+    [key: string]: unknown;
+  };
+  created_at: string;
+};
+
 export async function getActivePlan() {
   const sb = await createClient();
   const { data } = await sb
@@ -753,6 +772,21 @@ export async function getCoachRuns(limit = 20) {
     .order("created_at", { ascending: false })
     .limit(limit);
   return data ?? [];
+}
+
+export async function getCoachMessages(limit = 60): Promise<CoachMessage[]> {
+  const sb = await createClient();
+  const { data, error } = await sb
+    .from("coach_messages")
+    .select("id, user_id, role, content, intent, metadata, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    // De pagina blijft bruikbaar voordat de eenmalige chatmigratie is uitgevoerd.
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw error;
+  }
+  return ((data ?? []) as CoachMessage[]).reverse();
 }
 
 export async function getAthlete() {

@@ -1,8 +1,11 @@
 import { CoachRuleRow } from "@/components/coach-rule-row";
+import { CoachChat } from "@/components/coach-chat";
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { getCoachRuns, getRules } from "@/lib/queries";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Bot, ShieldCheck } from "lucide-react";
+import { getCoachMessages, getCoachRuns, getRules } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -89,30 +92,48 @@ const TRIGGER_LABEL: Record<string, string> = {
 };
 
 export default async function CoachPage() {
-  const [rules, runs] = await Promise.all([getRules(), getCoachRuns(10)]);
+  const [messages, rules, runs] = await Promise.all([
+    getCoachMessages(),
+    getRules(),
+    getCoachRuns(10),
+  ]);
 
   const monthStart = new Date();
   monthStart.setDate(1);
   const monthIso = monthStart.toISOString().slice(0, 10);
-  const monthCost = runs
-    .filter((r) => r.created_at >= monthIso)
-    .reduce((n, r) => n + Number(r.cost_usd ?? 0), 0);
+  const monthRuns = runs.filter((r) => r.created_at >= monthIso);
+  const monthChat = messages.filter(
+    (message) => message.role === "assistant" && message.created_at >= monthIso,
+  );
+  const monthCost =
+    monthRuns.reduce((n, r) => n + Number(r.cost_usd ?? 0), 0) +
+    monthChat.reduce((n, message) => n + Number(message.metadata?.cost_usd ?? 0), 0);
 
   return (
     <main className="space-y-6">
       <ScreenHeader
-        eyebrow="Verantwoording"
+        eyebrow="Persoonlijke begeleiding"
         title="Coach"
-        description="Volg welke regels je AI-coach gebruikt, wat hij aanpast en wat iedere beslissing kost."
-        action={<Badge variant="strain" className="mt-1">transparant</Badge>}
+        description="Vraag iets over je schema of vertel hoe je je voelt. De coach antwoordt met je actuele Garmin- en plangegevens."
+        action={<Badge variant="recovery" className="mt-1">Garmin-context</Badge>}
       />
 
-      {/* Kosten: transparant, want het draait op jouw credits. */}
-      <Card className="p-4">
+      <Tabs defaultValue="gesprek">
+        <TabsList aria-label="Coachweergave">
+          <TabsTrigger value="gesprek"><Bot /> Gesprek</TabsTrigger>
+          <TabsTrigger value="regels"><ShieldCheck /> Regels</TabsTrigger>
+        </TabsList>
+        <TabsContent value="gesprek">
+          <CoachChat initialMessages={messages} />
+        </TabsContent>
+        <TabsContent value="regels" className="space-y-6">
+
+          {/* Kosten: transparant, want het draait op jouw credits. */}
+          <Card className="p-4">
         <div className="flex items-baseline justify-between">
           <span className="label">Coachkosten deze maand</span>
           <span className="text-[11px] font-medium text-faint">
-            {runs.length} aanroepen
+            {monthRuns.length + monthChat.length} aanroepen incl. chat
           </span>
         </div>
         <div className="numeral mt-2 text-[28px] font-bold">
@@ -120,6 +141,7 @@ export default async function CoachPage() {
         </div>
         {runs[0] && (
           <div className="mt-3 border-t border-line pt-3">
+            <div className="label mb-2">Laatste planningrun</div>
             <div className="flex items-baseline justify-between">
               <span className="text-[13px] font-medium">
                 {TRIGGER_LABEL[runs[0].trigger] ?? runs[0].trigger}
@@ -134,9 +156,9 @@ export default async function CoachPage() {
             </div>
           </div>
         )}
-      </Card>
+          </Card>
 
-      {(["core", "tunable", "learned"] as const).map((cls) => {
+          {(["core", "tunable", "learned"] as const).map((cls) => {
         const list = rules.filter((r) => r.class === cls);
         const meta = CLASSES[cls];
         return (
@@ -206,7 +228,9 @@ export default async function CoachPage() {
             )}
           </section>
         );
-      })}
+          })}
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
