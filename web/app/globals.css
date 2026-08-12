@@ -182,6 +182,17 @@ body::-webkit-scrollbar {
     user-select: none;
   }
 
+  /* iOS kan een getapt element als `focus-visible` laten staan. Neutraliseer
+     daar alleen de web-focusring; inhoudelijke selectie- en statuskleuren
+     blijven gewoon zichtbaar. */
+  :where(a, button, input, textarea, select, [role="button"], [role="tab"], [tabindex]):focus,
+  :where(a, button, input, textarea, select, [role="button"], [role="tab"], [tabindex]):focus-visible {
+    outline: none !important;
+    --tw-ring-color: transparent !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+  }
+
   .surface-pressable:active {
     background: var(--color-s2);
     border-color: var(--color-line-strong);
@@ -192,10 +203,12 @@ body::-webkit-scrollbar {
   outline: none;
 }
 
-.focus-ring:focus-visible {
-  box-shadow:
-    0 0 0 2px var(--color-canvas),
-    0 0 0 4px rgb(244 246 246 / 0.7);
+@media (hover: hover) and (pointer: fine) {
+  .focus-ring:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--color-canvas),
+      0 0 0 4px rgb(244 246 246 / 0.7);
+  }
 }
 
 /* Subtiel glas voor de zwevende navigatie: genoeg transparantie om content
@@ -208,6 +221,14 @@ body::-webkit-scrollbar {
     0 16px 44px rgb(0 0 0 / 0.48);
   -webkit-backdrop-filter: blur(18px) saturate(1.12);
   backdrop-filter: blur(18px) saturate(1.12);
+}
+
+/* Drawerinhoud scrollt als een native sheet. Alleen de Vaul-handle mag de
+   sheet verslepen; de scroller houdt zijn momentum binnen de drawer. */
+[data-vaul-drawer] .overflow-y-auto {
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .route-map .leaflet-container {

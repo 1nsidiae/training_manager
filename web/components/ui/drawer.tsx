@@ -5,11 +5,11 @@ import { Drawer as DrawerPrimitive } from "vaul";
 import { cn } from "@/lib/utils";
 
 function Drawer(props: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root shouldScaleBackground={false} {...props} />;
+  return <DrawerPrimitive.Root {...props} shouldScaleBackground={false} handleOnly />;
 }
 
 function DrawerNested(props: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) {
-  return <DrawerPrimitive.NestedRoot {...props} />;
+  return <DrawerPrimitive.NestedRoot {...props} handleOnly />;
 }
 
 const DrawerTrigger = DrawerPrimitive.Trigger;
@@ -29,7 +29,10 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         {...props}
       >
-        <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-s3" />
+        <DrawerPrimitive.Handle
+          className="mt-2.5 shrink-0"
+          style={{ width: 40, height: 4, opacity: 1, backgroundColor: "var(--color-s3)" }}
+        />
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>

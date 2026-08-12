@@ -16,7 +16,12 @@ const PHASES = {
 } as const;
 
 function gmt(value: string) {
-  return new Date(`${value.replace(/Z$/, "").replace(/\.0$/, "")}Z`).getTime();
+  /* Garmin gebruikt hier vaak `YYYY-MM-DD HH:mm:ss`. Chromium accepteert die
+     losse spatie, maar iOS/Safari eist een echte ISO-`T`; anders verdwijnen
+     alle segmenten uit de tijdlijn als "ongeldige" datums. */
+  const iso = value.trim().replace(" ", "T").replace(/\.\d+$/, "");
+  const zoned = /(?:Z|[+-]\d{2}:\d{2})$/i.test(iso) ? iso : `${iso}Z`;
+  return Date.parse(zoned);
 }
 
 function timeLabel(timestamp: number) {
@@ -78,11 +83,13 @@ export function SleepStageTimeline({ wellness }: { wellness: Wellness }) {
   return (
     <Tabs defaultValue={normalized.length ? "timeline" : "phases"}>
       <TabsList className="h-9">
-        <TabsTrigger value="timeline" disabled={!normalized.length}>Tijdlijn</TabsTrigger>
+        <TabsTrigger value="timeline">Tijdlijn</TabsTrigger>
         <TabsTrigger value="phases">Fasen</TabsTrigger>
       </TabsList>
 
       <TabsContent value="timeline" className="mt-5">
+        {normalized.length ? (
+          <>
         <div className="grid grid-cols-[44px_1fr] gap-2">
           <div className="relative h-[172px] text-[9px] font-semibold text-faint">
             {["Wakker", "REM", "Licht", "Diep"].map((label, index) => (
@@ -166,6 +173,15 @@ export function SleepStageTimeline({ wellness }: { wellness: Wellness }) {
             </div>
           ))}
         </div>
+          </>
+        ) : (
+          <div className="rounded-row border border-line bg-s2/70 px-4 py-5 text-center">
+            <div className="text-[12px] font-semibold text-ink">Nog geen tijdlijn gesynchroniseerd</div>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-faint">
+              De slaapduur en fasetotalen zijn er wel. Na de volgende Garmin-sync verschijnen ook de exacte tijdstippen hier.
+            </p>
+          </div>
+        )}
       </TabsContent>
 
       <TabsContent value="phases" className="mt-4">
