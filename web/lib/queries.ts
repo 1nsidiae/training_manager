@@ -14,6 +14,7 @@ export type SessionType =
 
 export type PlanSession = {
   id: number;
+  plan_id: number;
   sport: string;
   day: string;
   session_type: SessionType;
@@ -44,7 +45,7 @@ export type WorkoutConflict = {
 };
 
 const SESSION_COLUMNS =
-  "id, sport, day, session_type, title, description, planned_distance_m, " +
+  "id, plan_id, sport, day, session_type, title, description, planned_distance_m, " +
   "planned_duration_s, hr_cap, status, activity_id, structure, targets, garmin_workout_id, " +
   "garmin_schedule_id, pushed_at, push_error";
 

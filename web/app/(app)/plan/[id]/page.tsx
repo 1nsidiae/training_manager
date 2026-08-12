@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SessionActions, SessionStatusBadge } from "@/components/session-actions";
 import { WorkoutPush } from "@/components/workout-push";
-import { getSession, getWorkoutConflict, type Step } from "@/lib/queries";
+import { getPlanSessions, getSession, getWorkoutConflict, type Step } from "@/lib/queries";
 import { SESSION_META, dayLabel, duration, km, paceTarget } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +64,7 @@ export default async function SessionPage({
     getWorkoutConflict(sessionId),
   ]);
   if (!session) notFound();
+  const planSessions = await getPlanSessions(session.plan_id);
 
   const meta = SESSION_META[session.session_type];
   const steps = session.structure?.steps ?? [];
@@ -131,7 +132,7 @@ export default async function SessionPage({
         ) : null}
       </div>
 
-      <SessionActions session={session} />
+      <SessionActions session={session} planSessions={planSessions} />
 
       {blocks.length > 0 && (
         <section>

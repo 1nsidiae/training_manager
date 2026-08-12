@@ -1,9 +1,14 @@
-const STATIC_CACHE = "training-manager-static-v2";
+// v3: nieuw merk. De iconen worden cache-first geserveerd, dus zonder deze
+// ophoging blijft het oude limoengroene icoon staan tot de cache vervalt.
+const STATIC_CACHE = "training-manager-static-v3";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/icon-maskable-192.png",
+  "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
+  "/icons/favicon-32.png",
 ];
 
 self.addEventListener("install", (event) => {
