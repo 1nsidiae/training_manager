@@ -24,7 +24,7 @@ const DrawerPortal = DrawerPrimitive.Portal;
 const DrawerClose = DrawerPrimitive.Close;
 
 function DrawerOverlay({ className, ...props }: React.ComponentProps<typeof DrawerPrimitive.Overlay>) {
-  return <DrawerPrimitive.Overlay className={cn("fixed inset-0 z-[60] bg-black/70 backdrop-blur-[3px]", className)} {...props} />;
+  return <DrawerPrimitive.Overlay className={cn("app-drawer-overlay fixed inset-0 z-[60] bg-black/70 backdrop-blur-[3px]", className)} {...props} />;
 }
 
 function DrawerContent({ className, children, ...props }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
@@ -32,7 +32,7 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
     <DrawerPortal>
       <DrawerOverlay />
       <DrawerPrimitive.Content
-        className={cn("fixed inset-x-0 bottom-0 z-[70] mx-auto flex max-h-[90vh] max-w-lg flex-col rounded-t-[24px] border-t border-line-strong bg-s1 outline-none", className)}
+        className={cn("app-drawer-content fixed inset-x-0 bottom-0 z-[70] mx-auto flex max-h-[90vh] max-w-lg flex-col rounded-t-[24px] border-t border-line-strong bg-s1 outline-none", className)}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         {...props}
       >

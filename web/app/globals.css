@@ -52,8 +52,7 @@
 
 html {
   color-scheme: dark;
-  /* De opaque iOS-statusbar staat buiten de documentviewport. Daardoor hoeft
-     WebKit geen translucente viewport-offset te corrigeren. */
+  /* Edge-to-edge canvas; interactieve inhoud gebruikt de safe-area insets. */
   background: #283339;
   height: 100%;
   width: 100%;
@@ -127,6 +126,25 @@ body::-webkit-scrollbar {
   grid-column: 1;
   grid-row: 2;
   align-self: end;
+}
+
+/* WebKit bug 236445: in een geïnstalleerde PWA met black-translucent eindigt
+   de layoutviewport één safe-area-inset-top te vroeg. Compenseer exact die
+   door WebKit gerapporteerde fout in de rootbox, vóór de eerste paint. Geen
+   visualViewport-metingen, timers, fixed footer of hydration-correctie. */
+@media (display-mode: standalone) {
+  html {
+    height: calc(100% + env(safe-area-inset-top, 0px));
+  }
+
+  .app-drawer-overlay {
+    bottom: calc(0px - env(safe-area-inset-top, 0px));
+  }
+
+  .app-drawer-content {
+    bottom: calc(0px - env(safe-area-inset-top, 0px));
+    max-height: calc(90vh + env(safe-area-inset-top, 0px));
+  }
 }
 
 * {

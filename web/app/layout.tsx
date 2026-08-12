@@ -19,9 +19,7 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
-  // `black-translucent` verschuift in standalone WebKit de onderste viewport.
-  // Een opaque statusbar geeft iOS één stabiele layoutviewport vanaf frame 1.
-  appleWebApp: { capable: true, statusBarStyle: "black", title: "Training" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Training" },
 };
 
 export const viewport: Viewport = {
