@@ -135,8 +135,8 @@ body::-webkit-scrollbar {
 .app-drawer-content > .overflow-y-auto {
   flex: 1 1 auto;
   min-height: 0;
-  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
-  scroll-padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* WebKit bug 236445: in een geïnstalleerde PWA met black-translucent eindigt
@@ -162,10 +162,10 @@ body::-webkit-scrollbar {
      verdwijnt onze gewone eindmarge samen met de laatste tekst buiten beeld. */
   .app-drawer-content > .overflow-y-auto {
     padding-bottom: calc(
-      2rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
+      1.5rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
     );
     scroll-padding-bottom: calc(
-      2rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
+      1.5rem + env(safe-area-inset-bottom, 0px) + env(safe-area-inset-top, 0px)
     );
   }
 }
