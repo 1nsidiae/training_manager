@@ -121,6 +121,9 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt?: string | null }) {
       setRequestId(data.id);
       return;
     }
+    // De unieke index geldt voor de hele wachtrij, dus een 23505 kan net zo goed
+    // een workout-push zijn. Alleen een eigen wachtende aanvraag adopteren we;
+    // anders zouden we het resultaat van andermans taak melden als sync.
     if (error?.code === "23505") {
       const { data: existing } = await sb
         .from("sync_log")
@@ -134,6 +137,9 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt?: string | null }) {
         setRequestId(existing.id);
         return;
       }
+      setState("error");
+      setDetail("Wacht tot de andere Garmin-taak klaar is en probeer opnieuw.");
+      return;
     }
     setState("error");
     setDetail("De sync kon niet worden aangevraagd.");

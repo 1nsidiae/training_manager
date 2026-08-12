@@ -246,6 +246,42 @@ body::-webkit-scrollbar {
   backdrop-filter: blur(18px) saturate(1.12);
 }
 
+/* Onder de zwevende capsule blijft de safe-area van de home-indicator over.
+   Die strook is transparant, dus daar schoof scrollende content doorheen en
+   leek de balk niet tot onderaan te lopen. Deze scrim vult alles achter en
+   onder de capsule tot de schermrand, zonder de capsule zelf dicht te maken:
+   content vervaagt eronder in plaats van halverwege afgesneden te worden.
+   Negatieve z-index houdt hem achter de capsule; de nav heeft z-50 en vormt
+   dus zijn eigen stacking context, waardoor dit niet achter de pagina zakt. */
+.nav-scrim::before,
+.nav-scrim::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Boven en achter de capsule: content vervaagt, ze verdwijnt niet abrupt. */
+.nav-scrim::before {
+  inset: -32px 0 max(env(safe-area-inset-bottom), 12px) 0;
+  background: linear-gradient(
+    to bottom,
+    rgb(16 21 24 / 0) 0%,
+    rgb(16 21 24 / 0.62) 40%,
+    rgb(16 21 24) 100%
+  );
+}
+
+/* De strook onder de capsule is dicht. Een gradient die op 0,97 eindigt laat
+   daar nog net een kaartrand doorschemeren, en precies dat maakte de balk
+   "niet helemaal tot onder". De hoogte volgt de padding van de nav, zodat dit
+   ook klopt op toestellen zonder home-indicator. */
+.nav-scrim::after {
+  inset: auto 0 0 0;
+  height: max(env(safe-area-inset-bottom), 12px);
+  background: rgb(16 21 24);
+}
+
 /* Drawerinhoud scrollt als een native sheet. Alleen de Vaul-handle mag de
    sheet verslepen; de scroller houdt zijn momentum binnen de drawer. */
 [data-vaul-drawer] .overflow-y-auto {
