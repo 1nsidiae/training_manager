@@ -1,12 +1,16 @@
 {
   "name": "Training Manager",
   "short_name": "Training",
+  "id": "/",
+  "scope": "/",
+  "lang": "nl-BE",
   "description": "AI-coach op je eigen Garmin-data",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#101518",
-  "theme_color": "#101518",
+  "theme_color": "#283339",
   "orientation": "portrait",
+  "categories": ["health", "fitness", "sports"],
   "icons": [
     {
       "src": "/icons/icon-192.png",

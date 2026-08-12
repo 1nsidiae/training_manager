@@ -52,22 +52,46 @@
 
 html {
   color-scheme: dark;
-  background: var(--color-canvas);
+  /* De pagina loopt onder de transparante iOS-statusbar door. De safe-area
+     wordt daarom uitsluitend door de app-shell toegepast, niet hier. */
+  background: #283339;
   min-height: 100%;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0
-    env(safe-area-inset-left);
+  width: 100%;
+  overflow-x: clip;
+  overscroll-behavior: none;
+  scrollbar-width: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
-  background: linear-gradient(180deg, #283339 0%, #101518 32%, #101518 100%) fixed;
+  background-color: var(--color-canvas);
+  background-image: linear-gradient(180deg, #283339 0%, #101518 38%, #101518 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100dvh;
   color: var(--color-ink);
   font-weight: 500;
   letter-spacing: -0.012em;
   -webkit-font-smoothing: antialiased;
   font-synthesis: none;
-  overscroll-behavior-y: none;
   min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior: none;
+  scrollbar-width: none;
   text-rendering: optimizeLegibility;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell {
+  width: 100%;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
 }
 
 * {
@@ -137,13 +161,31 @@ body {
     transform 160ms ease;
 }
 
-.surface-pressable:hover {
-  background: var(--color-s2);
-  border-color: var(--color-line-strong);
-}
-
 .surface-pressable:active {
   transform: scale(0.992);
+}
+
+/* Hover bestaat alleen op een apparaat met een echte muis/trackpad. Zo blijft
+   een iOS-tap nooit als een plakkende hover-state achter. */
+@media (hover: hover) and (pointer: fine) {
+  .surface-pressable:hover {
+    background: var(--color-s2);
+    border-color: var(--color-line-strong);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  :where(a, button, [role="button"], [role="tab"]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  .surface-pressable:active {
+    background: var(--color-s2);
+    border-color: var(--color-line-strong);
+  }
 }
 
 .focus-ring {

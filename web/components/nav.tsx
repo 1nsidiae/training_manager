@@ -37,8 +37,8 @@ export function BottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "focus-ring group relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[19px] transition-colors",
-                  active ? "text-ink" : "text-faint hover:bg-s2/70 hover:text-muted",
+                  "focus-ring group relative flex min-w-0 touch-manipulation select-none flex-col items-center justify-center gap-0.5 rounded-[19px] transition-[color,background-color,transform] active:scale-[0.97] active:bg-s2/70",
+                  active ? "text-ink" : "text-faint",
                 )}
               >
                 {active ? (
@@ -63,10 +63,10 @@ export function BottomNav() {
           aria-label={COACH_TAB.label}
           aria-current={coachActive ? "page" : undefined}
           className={cn(
-            "nav-glass focus-ring grid size-[64px] shrink-0 place-items-center rounded-full border transition-colors",
+            "nav-glass focus-ring grid size-[64px] shrink-0 touch-manipulation select-none place-items-center rounded-full border transition-[color,border-color,transform] active:scale-[0.96]",
             coachActive
               ? "border-teal/40 text-teal"
-              : "border-recovery/30 text-recovery hover:border-recovery/50 hover:text-ink",
+              : "border-recovery/30 text-recovery",
           )}
         >
           <span
