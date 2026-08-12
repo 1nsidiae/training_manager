@@ -95,6 +95,11 @@ body::-webkit-scrollbar {
 }
 
 .app-viewport {
+  /* In standalone iOS kan de fixed containing block eindigen waar de visuele
+     viewport begint (onder de statusbar). De client synchroniseert daarom de
+     echte visuele onderkant; 100dvh blijft de SSR- en non-iOS-fallback. */
+  height: var(--app-viewport-height, 100dvh);
+  min-height: 100dvh;
   isolation: isolate;
   background-color: var(--color-canvas);
   background-image: linear-gradient(180deg, #283339 0%, #101518 38%, #101518 100%);
