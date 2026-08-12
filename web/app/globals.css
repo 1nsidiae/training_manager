@@ -1,0 +1,266 @@
+@import "tailwindcss";
+
+/* WHOOP-aligned interface tokens. Hexwaarden en rollen volgen de aangeleverde
+   WHOOP Brand & Design Guidelines; de app gebruikt geen WHOOP-logo of namen
+   voor proprietary WHOOP-scores. */
+@theme {
+  --color-canvas: #101518;
+  --color-base: #131a1e;
+  --color-s1: #182126;
+  --color-s2: #222d33;
+  --color-s3: #303b41;
+
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.16);
+
+  --color-ink: #ffffff;
+  --color-muted: #b8c0c3;
+  --color-faint: #7f898d;
+  --color-off: #586267;
+
+  /* Officiële WHOOP-paletten en hun toegewezen datarollen. */
+  --color-teal: #00f19f;
+  --color-strain: #0093e7;
+  --color-recovery: #67aee6;
+  --color-sleep: #7ba1bb;
+  --color-high: #16ec06;
+  --color-medium: #ffde00;
+  --color-low: #ff0026;
+  --color-warning: #ffde00;
+  --color-danger: #ff0026;
+
+  /* Afgeleide activiteitstinten: dezelfde verzadiging en helderheid als het
+     WHOOP-accentpalet, met een vaste betekenis per trainingssoort. */
+  --color-run-walk: #7ba1bb;
+  --color-run-recovery: #67aee6;
+  --color-run-easy: #0093e7;
+  --color-run-long: #00bdd6;
+  --color-run-tempo: #00f19f;
+  --color-run-interval: #a9e600;
+  --color-run-race: #ffde00;
+  --color-run-strength: #ff6257;
+  --color-run-cross: #7f86ff;
+
+  --radius-row: 12px;
+  --radius-card: 18px;
+}
+
+@theme {
+  --font-sans: "Instrument Sans Variable", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-numeral: "Barlow", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-canvas);
+  min-height: 100%;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0
+    env(safe-area-inset-left);
+}
+
+body {
+  background: linear-gradient(180deg, #283339 0%, #101518 32%, #101518 100%) fixed;
+  color: var(--color-ink);
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  overscroll-behavior-y: none;
+  min-height: 100dvh;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+::selection {
+  background: rgb(0 241 159 / 0.28);
+  color: var(--color-ink);
+}
+
+/* Grote waarden: tabulaire cijfers zodat ze niet verspringen, strakke tracking. */
+.numeral {
+  font-family: var(--font-numeral);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* label: 11-12pt medium, kort en hoog contrast. */
+.label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+.micro {
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--color-faint);
+}
+
+/* Kaarten: vlak, licht opgetild door surface-contrast en een dunne rand.
+   Geen gradient, geen schaduw. */
+.card {
+  background: var(--color-s1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+
+.row {
+  background: var(--color-s2);
+  border-radius: var(--radius-row);
+}
+
+/* Insight-kaart heeft een iets sterkere rand dan gewone kaarten. */
+.card-insight {
+  background: var(--color-s1);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-card);
+}
+
+/* Scorekaarten krijgen een minimale categorietint. Zo blijft de interface
+   donker en rustig, maar zijn slaap, HRV en herstel direct uit elkaar te houden. */
+.metric-score-card {
+  background: var(--color-s1);
+  border-color: var(--color-line);
+}
+
+.surface-pressable {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.surface-pressable:hover {
+  background: var(--color-s2);
+  border-color: var(--color-line-strong);
+}
+
+.surface-pressable:active {
+  transform: scale(0.992);
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--color-canvas),
+    0 0 0 4px rgb(244 246 246 / 0.7);
+}
+
+/* Subtiel glas voor de zwevende navigatie: genoeg transparantie om content
+   erachter te voelen, maar donker genoeg om iconen altijd leesbaar te houden. */
+.nav-glass {
+  background: rgb(24 33 38 / 0.84);
+  border-color: rgb(255 255 255 / 0.14);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.055),
+    0 16px 44px rgb(0 0 0 / 0.48);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.route-map .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: var(--color-s3);
+  font-family: var(--font-sans);
+}
+
+.route-map .leaflet-tile-pane {
+  filter: saturate(0.8) brightness(1.16) contrast(0.95);
+}
+
+.route-map .leaflet-control-attribution {
+  margin: 0;
+  padding: 2px 5px;
+  background: rgb(16 21 24 / 0.76);
+  color: var(--color-faint);
+  font-size: 7px;
+  line-height: 1.35;
+  backdrop-filter: blur(6px);
+}
+
+.route-map .leaflet-control-attribution a {
+  color: var(--color-muted);
+}
+
+.screen-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.metric-title {
+  font-family: var(--font-numeral);
+  font-variant-numeric: tabular-nums;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.app-shell :is(h1, h2) {
+  text-wrap: balance;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+}
+
+/* Motion: gemeten en fysiek. Ring tekent met de klok mee, kaarten schuiven
+   licht omhoog. Geen bounce, geen decoratieve animatie. */
+@keyframes ring-draw {
+  from {
+    stroke-dashoffset: var(--dash-full);
+  }
+}
+.ring-draw {
+  animation: ring-draw 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.rise {
+  animation: rise 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+.sweep {
+  animation: sweep 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-draw,
+  .rise,
+  .sweep {
+    animation: none;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
