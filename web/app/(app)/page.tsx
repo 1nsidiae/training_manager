@@ -420,7 +420,7 @@ export default async function TodayPage({
                 return (
                   <div key={iso} className="flex flex-1 flex-col items-center gap-1.5">
                     <span className={`text-[9px] font-semibold ${isSelected ? "text-ink" : "text-faint"}`}>{letter}</span>
-                    <div className={`relative h-8 w-full rounded-lg ${dayMeta ? dayMeta.dot : "bg-s3/70"} ${!daySession ? "opacity-40" : ""} ${isSelected ? "ring-1 ring-ink/60 ring-offset-2 ring-offset-s1" : ""}`}>
+                    <div className={`relative h-8 w-full rounded-lg ${dayMeta ? dayMeta.dot : "bg-s3/70"} ${!daySession ? "opacity-40" : ""} ${isSelected ? "brightness-110" : ""}`}>
                       {isDone ? <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-canvas/65" /> : null}
                     </div>
                   </div>

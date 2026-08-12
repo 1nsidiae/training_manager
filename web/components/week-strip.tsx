@@ -31,7 +31,7 @@ export function WeekStrip({
             <span className={`micro ${isToday ? "text-ink" : ""}`}>{letter}</span>
             <div
               className={`h-8 w-full rounded-[6px] ${meta ? meta.dot : "bg-s3"} ${
-                isToday ? "ring-1 ring-line-strong ring-offset-2 ring-offset-s1" : ""
+                isToday ? "brightness-110" : ""
               }`}
               style={session ? undefined : { opacity: 0.5 }}
             />

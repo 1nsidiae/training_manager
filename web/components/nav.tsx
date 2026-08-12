@@ -25,7 +25,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Hoofdnavigatie"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 safe-bottom"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-50 px-3 safe-bottom"
     >
       <div className="pointer-events-auto mx-auto flex max-w-[500px] items-end gap-2">
         <div className="nav-glass grid h-[64px] min-w-0 flex-1 grid-cols-4 overflow-hidden rounded-[24px] border p-1">
