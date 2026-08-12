@@ -766,3 +766,25 @@ export async function getLatestVo2Max() {
     .maybeSingle();
   return data;
 }
+
+export type Vo2MaxSnapshot = {
+  day: string;
+  vo2max_running: number | null;
+};
+
+/** Garmin VO2max-metingen tot en met de gekozen dag. De reeks is bewust
+ * oplopend gesorteerd zodat grafieken en "vorige meting" eenduidig zijn. */
+export async function getVo2MaxWindow(endDay: string, days = 180) {
+  const fromDate = new Date(`${endDay}T12:00:00Z`);
+  fromDate.setUTCDate(fromDate.getUTCDate() - Math.max(days - 1, 0));
+  const from = fromDate.toISOString().slice(0, 10);
+  const sb = await createClient();
+  const { data } = await sb
+    .from("fitness_snapshots")
+    .select("day, vo2max_running")
+    .gte("day", from)
+    .lte("day", endDay)
+    .not("vo2max_running", "is", null)
+    .order("day");
+  return (data ?? []) as Vo2MaxSnapshot[];
+}

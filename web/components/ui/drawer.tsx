@@ -9,14 +9,25 @@ function Drawer(props: React.ComponentProps<typeof DrawerPrimitive.Root>) {
     <DrawerPrimitive.Root
       {...props}
       shouldScaleBackground={false}
-      handleOnly
+      /* Vaul beslist op basis van de richting en scrollpositie: omhoog blijft
+         native content scrollen; omlaag sleept de sheet zodra de scroller aan
+         de bovenkant staat. Zo werkt de volledige drawer als gesturegebied. */
+      handleOnly={false}
+      scrollLockTimeout={150}
       dismissible
     />
   );
 }
 
 function DrawerNested(props: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) {
-  return <DrawerPrimitive.NestedRoot {...props} handleOnly dismissible />;
+  return (
+    <DrawerPrimitive.NestedRoot
+      {...props}
+      handleOnly={false}
+      scrollLockTimeout={150}
+      dismissible
+    />
+  );
 }
 
 const DrawerTrigger = DrawerPrimitive.Trigger;

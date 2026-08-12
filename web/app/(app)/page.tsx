@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { Activity, ArrowUpRight, BatteryCharging, CalendarDays, Footprints, HeartPulse, MoonStar, Sparkles, Watch } from "lucide-react";
+import { Activity, ArrowUpRight, CalendarDays, Sparkles, Watch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { BiometricMetricDrawer } from "@/components/biometric-metric-drawer";
+import { HealthMetricDrawer } from "@/components/health-metric-drawer";
 import { DetailDrawer } from "@/components/detail-drawer";
 import { StructureBar } from "@/components/structure-bar";
 import { TodayHeader } from "@/components/today-header";
-import { MetricCard } from "@/components/metric-card";
 import { PlanApproval } from "@/components/plan-approval";
 import { PlanImpactCard } from "@/components/plan-impact-card";
 import { TrainingLoadCard } from "@/components/training-load-card";
@@ -19,7 +19,7 @@ import {
   getAdjustments,
   getAthlete,
   getLastGarminSync,
-  getLatestVo2Max,
+  getVo2MaxWindow,
   getPlanApplySync,
   getPlanActivitySource,
   getPlanSessions,
@@ -102,8 +102,8 @@ export default async function TodayPage({
       plan ? getPlanSessions(plan.id) : Promise.resolve([]),
       previousPlan ? getPlanSessions(previousPlan.id) : Promise.resolve([]),
       proposed ? getPlanSessions(proposed.id) : Promise.resolve([]),
-      getWellnessWindow(selectedDay, 56),
-      getLatestVo2Max(),
+      getWellnessWindow(selectedDay, 180),
+      getVo2MaxWindow(selectedDay, 180),
       getRuleParams(),
       getAthlete(),
       getLastGarminSync(),
@@ -123,6 +123,7 @@ export default async function TodayPage({
     ) ?? null;
   const latest = wellness.find((item) => item.day === selectedDay) ?? null;
   const series = [...wellness].reverse();
+  const vo2maxSeries = vo2.map((item) => ({ day: item.day, value: item.vo2max_running }));
   const readiness = readinessTone(latest?.training_readiness_score);
   const sleep = sleepTone(latest?.sleep_total_s);
   const hrv = hrvTone(latest?.hrv_status);
@@ -180,9 +181,6 @@ export default async function TodayPage({
   }
 
   const recentSeries = series.slice(-14);
-  const rhr = recentSeries.map((w) => w.resting_hr).filter((v): v is number => v != null);
-  const rhrAvg = rhr.length ? rhr.reduce((a, b) => a + b, 0) / rhr.length : null;
-
   const meta = session ? SESSION_META[session.session_type] : null;
   const steps = session?.structure?.steps ?? [];
   const sessionPace =
@@ -442,56 +440,12 @@ export default async function TodayPage({
           </Button>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
-          <MetricCard
-            name="Body Battery"
-            value={latest?.body_battery_high?.toString() ?? "–"}
-            unit="hoogste"
-            baseline={latest?.body_battery_low != null ? `laagste ${latest.body_battery_low}` : "nog niet gesynchroniseerd"}
-            icon={<BatteryCharging className="size-3.5" />}
-            series={recentSeries.map((w) => w.body_battery_high)}
-            color="#00f19f"
-          />
-          <MetricCard
-            name="Stressniveau"
-            value={latest?.avg_stress?.toString() ?? "–"}
-            baseline="Garmin daggemiddelde"
-            icon={<Activity className="size-3.5" />}
-            series={recentSeries.map((w) => w.avg_stress)}
-            color="#ffde00"
-          />
-          <MetricCard
-            name="Stappen"
-            value={latest?.steps?.toLocaleString("nl-BE") ?? "–"}
-            baseline={latest ? dateLabelShort(latest.day) : undefined}
-            icon={<Footprints className="size-3.5" />}
-            series={recentSeries.map((w) => w.steps)}
-            color="#0093e7"
-          />
-          <MetricCard
-            name="Rusthartslag"
-            value={latest?.resting_hr?.toString() ?? "–"}
-            unit="bpm"
-            baseline={rhrAvg ? `14d gem. ${rhrAvg.toFixed(0)}` : undefined}
-            icon={<HeartPulse className="size-3.5" />}
-            series={recentSeries.map((w) => w.resting_hr)}
-            color="#67aee6"
-          />
-          <MetricCard
-            name="Slaapscore"
-            value={latest?.sleep_score?.toString() ?? "–"}
-            unit="/ 100"
-            baseline="Garmin Slaapscore"
-            icon={<MoonStar className="size-3.5" />}
-            series={recentSeries.map((w) => w.sleep_score)}
-            color="#7ba1bb"
-          />
-          <MetricCard
-            name="VO2max"
-            value={vo2?.vo2max_running ? Number(vo2.vo2max_running).toFixed(0) : "–"}
-            baseline={vo2?.day ? `bijgewerkt ${vo2.day.slice(5)}` : undefined}
-            icon={<Activity className="size-3.5" />}
-            href="/profiel"
-          />
+          <HealthMetricDrawer kind="body_battery" wellness={series} selectedDay={selectedDay} />
+          <HealthMetricDrawer kind="stress" wellness={series} selectedDay={selectedDay} />
+          <HealthMetricDrawer kind="steps" wellness={series} selectedDay={selectedDay} />
+          <HealthMetricDrawer kind="resting_hr" wellness={series} selectedDay={selectedDay} />
+          <HealthMetricDrawer kind="sleep_score" wellness={series} selectedDay={selectedDay} />
+          <HealthMetricDrawer kind="vo2max" wellness={series} vo2max={vo2maxSeries} selectedDay={selectedDay} />
         </div>
       </section>
     </main>
@@ -513,11 +467,4 @@ function Stat({
       <div className={`numeral text-[19px] font-semibold ${tone}`}>{value}</div>
     </div>
   );
-}
-
-function dateLabelShort(day: string) {
-  return new Date(`${day}T12:00:00`).toLocaleDateString("nl-BE", {
-    day: "numeric",
-    month: "short",
-  });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   CartesianGrid,
@@ -36,6 +36,9 @@ function dayLabel(day: string, long = false) {
 export function InteractiveTrendChart({ data, color, average, formatValue }: Props) {
   const measured = useMemo(() => data.filter((point) => point.value != null), [data]);
   const [selected, setSelected] = useState<TrendPoint | null>(measured.at(-1) ?? null);
+  useEffect(() => {
+    setSelected(measured.at(-1) ?? null);
+  }, [measured]);
   const domain = useMemo(() => {
     const values = measured.map((point) => point.value as number);
     if (!values.length) return [0, 100] as [number, number];
