@@ -13,6 +13,8 @@ export type NewPlanRequest = {
   targetDistanceM: number | null;
   targetDate: string | null;
   targetTimeS: number | null;
+  planStartDate: string;
+  firstTrainingDate: string;
   currentCapacityM: number;
   currentWeeklyVolumeM: number;
   benchmarkDistanceM: number | null;
@@ -97,6 +99,20 @@ function validate(input: NewPlanRequest): string | null {
   if (input.targetTimeS != null && !finiteBetween(input.targetTimeS, 60, 259_200)) {
     return "De gewenste eindtijd is ongeldig.";
   }
+  if (!validIsoDate(input.planStartDate) || !validIsoDate(input.firstTrainingDate)) {
+    return "Kies een geldige planstart en eerste trainingsdag.";
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (new Date(`${input.planStartDate}T12:00:00`) < today) {
+    return "De start van je nieuwe plan kan niet in het verleden liggen.";
+  }
+  if (input.firstTrainingDate < input.planStartDate) {
+    return "Je eerste training kan niet vóór de start van je plan vallen.";
+  }
+  if (input.targetDate && input.firstTrainingDate >= input.targetDate) {
+    return "Je eerste training moet vóór je doeldatum vallen.";
+  }
   if (!finiteBetween(input.currentCapacityM, 0, 200_000)) return "Vul je huidige loopcapaciteit in.";
   if (!finiteBetween(input.currentWeeklyVolumeM, 0, 400_000)) return "Vul een geldig huidig weekvolume in.";
   if (input.benchmarkDistanceM != null && !finiteBetween(input.benchmarkDistanceM, 500, 200_000)) {
@@ -116,6 +132,10 @@ function validate(input: NewPlanRequest): string | null {
   }
   if (input.trainingDays.length < input.sessionsPerWeek) {
     return "Kies minstens evenveel beschikbare dagen als trainingen per week.";
+  }
+  const firstTrainingWeekday = WEEKDAYS[(new Date(`${input.firstTrainingDate}T12:00:00Z`).getUTCDay() + 6) % 7];
+  if (!input.trainingDays.includes(firstTrainingWeekday)) {
+    return "Je eerste trainingsdag moet ook bij je beschikbare dagen staan.";
   }
   if (input.longRunDay && (!WEEKDAYS.includes(input.longRunDay) || !input.trainingDays.includes(input.longRunDay))) {
     return "Kies een beschikbare dag voor je lange duurloop.";
@@ -168,8 +188,10 @@ export async function requestNewPlan(input: NewPlanRequest): Promise<NewPlanResu
   }
 
   const params = {
-    plan_request_version: 1,
+    plan_request_version: 2,
     created_via: "plan_wizard",
+    plan_start_date: input.planStartDate,
+    first_training_date: input.firstTrainingDate,
     current_capacity_m: Math.round(input.currentCapacityM),
     continuous_running: input.currentCapacityM >= 1_000,
     current_weekly_volume_m: Math.round(input.currentWeeklyVolumeM),

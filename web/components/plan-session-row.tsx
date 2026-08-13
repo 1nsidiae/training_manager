@@ -79,19 +79,34 @@ export function PlanSessionRow({ session }: { session: PlanSession }) {
 
 /** Ingeklapte week: alleen het ritme, geen sessiedetails. */
 export function WeekBlocks({ sessions }: { sessions: PlanSession[] }) {
-  const byDay = new Map(sessions.map((s) => [new Date(`${s.day}T12:00:00`).getDay(), s]));
+  const byDay = new Map<number, PlanSession[]>();
+  for (const session of sessions) {
+    const day = new Date(`${session.day}T12:00:00`).getDay();
+    byDay.set(day, [...(byDay.get(day) ?? []), session]);
+  }
+
   const order = [1, 2, 3, 4, 5, 6, 0];
+  const dayNames = ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"];
 
   return (
     <div className="flex gap-1">
-      {order.map((d) => {
-        const session = byDay.get(d);
-        const meta = session ? SESSION_META[session.session_type] : null;
+      {order.map((d, index) => {
+        const daySessions = byDay.get(d) ?? [];
+        const labels = daySessions.map((session) => SESSION_META[session.session_type].label);
         return (
           <div
             key={d}
-            className={`h-[26px] flex-1 rounded-md ${meta ? meta.dot : "bg-s3 opacity-50"}`}
-          />
+            className="flex h-[30px] flex-1 flex-col gap-[2px] overflow-hidden rounded-md bg-s3/50 p-[2px]"
+            aria-label={`${dayNames[index]}: ${labels.length ? labels.join(" en ") : "rustdag"}`}
+            title={`${dayNames[index]}: ${labels.length ? labels.join(" + ") : "rustdag"}`}
+          >
+            {daySessions.map((session) => (
+              <span
+                key={session.id}
+                className={`min-h-0 flex-1 rounded-[4px] ${SESSION_META[session.session_type].dot}`}
+              />
+            ))}
+          </div>
         );
       })}
     </div>

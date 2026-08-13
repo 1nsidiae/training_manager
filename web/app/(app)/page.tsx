@@ -213,7 +213,7 @@ export default async function TodayPage({
   const completion = weekSessions.length ? (doneSessions.length / weekSessions.length) * 100 : 0;
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-4">
       <TodayHeader
         initials={initials}
         lastSyncAt={lastSync?.finished_at}

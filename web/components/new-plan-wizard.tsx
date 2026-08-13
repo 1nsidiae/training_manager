@@ -81,6 +81,8 @@ type WizardData = {
   customDistanceKm: string;
   targetDate: string | null;
   targetTime: string;
+  planStartDate: string;
+  firstTrainingDate: string;
   currentCapacityKm: string;
   currentWeeklyVolumeKm: string;
   benchmarkDistanceKm: string;
@@ -122,6 +124,28 @@ function dateToIso(value: Date | undefined) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function startOfToday() {
+  const value = new Date();
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function weekdayFromIso(iso: string): Weekday {
+  const index = new Date(`${iso}T12:00:00`).getDay();
+  return (["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as Weekday[])[index];
+}
+
+function firstAvailableDate(startIso: string, availableDays: Weekday[]) {
+  const date = new Date(`${startIso}T12:00:00`);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidate = new Date(date);
+    candidate.setDate(candidate.getDate() + offset);
+    const iso = dateToIso(candidate)!;
+    if (availableDays.includes(weekdayFromIso(iso))) return iso;
+  }
+  return startIso;
 }
 
 function distanceName(distanceM: number | null) {
@@ -179,6 +203,7 @@ export function NewPlanWizard({
   defaultBenchmark?: { distanceM: number; durationS: number } | null;
   initialRequest?: { id: number; status: "requested" | "running" | "ok" | "error"; error: string | null } | null;
 }) {
+  const defaultTrainingDays: Weekday[] = ["tuesday", "thursday", "sunday"];
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState(0);
@@ -189,31 +214,40 @@ export function NewPlanWizard({
   const [requestId, setRequestId] = React.useState<number | null>(initialRequest?.id ?? null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState("");
-  const [data, setData] = React.useState<WizardData>({
-    goalType: null,
-    targetDistanceM: 5_000,
-    customDistanceKm: "",
-    targetDate: null,
-    targetTime: "20:00",
-    currentCapacityKm: String(Math.round((defaultCapacityM / 1000) * 10) / 10),
-    currentWeeklyVolumeKm: String(Math.round((defaultWeeklyVolumeM / 1000) * 10) / 10),
-    benchmarkDistanceKm: defaultBenchmark ? String(Math.round((defaultBenchmark.distanceM / 1000) * 10) / 10) : "",
-    benchmarkTime: defaultBenchmark ? `${Math.floor(defaultBenchmark.durationS / 60)}:${String(defaultBenchmark.durationS % 60).padStart(2, "0")}` : "",
-    sessionsPerWeek: 3,
-    trainingDays: ["tuesday", "thursday", "sunday"],
-    longRunDay: "sunday",
-    maxWeekdayMinutes: "60",
-    maxWeekendMinutes: "120",
-    ambition: "balanced",
-    limitations: "",
+  const [data, setData] = React.useState<WizardData>(() => {
+    const planStartDate = dateToIso(new Date())!;
+    return {
+      goalType: null,
+      targetDistanceM: 5_000,
+      customDistanceKm: "",
+      targetDate: null,
+      targetTime: "20:00",
+      planStartDate,
+      firstTrainingDate: firstAvailableDate(planStartDate, defaultTrainingDays),
+      currentCapacityKm: String(Math.round((defaultCapacityM / 1000) * 10) / 10),
+      currentWeeklyVolumeKm: String(Math.round((defaultWeeklyVolumeM / 1000) * 10) / 10),
+      benchmarkDistanceKm: defaultBenchmark ? String(Math.round((defaultBenchmark.distanceM / 1000) * 10) / 10) : "",
+      benchmarkTime: defaultBenchmark ? `${Math.floor(defaultBenchmark.durationS / 60)}:${String(defaultBenchmark.durationS % 60).padStart(2, "0")}` : "",
+      sessionsPerWeek: 3,
+      trainingDays: defaultTrainingDays,
+      longRunDay: "sunday",
+      maxWeekdayMinutes: "60",
+      maxWeekendMinutes: "120",
+      ambition: "balanced",
+      limitations: "",
+    };
   });
 
   const selectedDistance = data.customDistanceKm
     ? Number(data.customDistanceKm.replace(",", ".")) * 1000
     : data.targetDistanceM;
   const needsGoalDetails = data.goalType === "race" || data.goalType === "time_target";
-  const steps = needsGoalDetails ? 5 : 4;
+  const steps = needsGoalDetails ? 6 : 5;
   const visualStep = step;
+  const baselineStep = needsGoalDetails ? 2 : 1;
+  const planStartStep = needsGoalDetails ? 3 : 2;
+  const availabilityStep = needsGoalDetails ? 4 : 3;
+  const reviewStep = needsGoalDetails ? 5 : 4;
 
   React.useEffect(() => {
     if (!requestId || (requestState !== "requested" && requestState !== "running")) return;
@@ -249,16 +283,22 @@ export function NewPlanWizard({
       if (data.goalType === "race" && !data.targetDate) return "Kies de datum van je wedstrijd.";
       if (data.goalType === "time_target" && !parseClock(data.targetTime)) return "Vul je doeltijd in als mm:ss of uu:mm:ss.";
     }
-    const baselineStep = needsGoalDetails ? 2 : 1;
     if (step === baselineStep) {
       if (!Number.isFinite(Number(data.currentCapacityKm)) || Number(data.currentCapacityKm) < 0) return "Vul je huidige aaneengesloten loopafstand in.";
       if (!Number.isFinite(Number(data.currentWeeklyVolumeKm)) || Number(data.currentWeeklyVolumeKm) < 0) return "Vul je huidige weekvolume in.";
       if ((data.benchmarkDistanceKm && !data.benchmarkTime) || (!data.benchmarkDistanceKm && data.benchmarkTime)) return "Vul voor je recente prestatie zowel afstand als tijd in, of laat beide leeg.";
       if (data.benchmarkTime && !parseClock(data.benchmarkTime)) return "Vul de recente tijd in als mm:ss of uu:mm:ss.";
     }
-    const availabilityStep = needsGoalDetails ? 3 : 2;
+    if (step === planStartStep) {
+      if (!data.planStartDate || !data.firstTrainingDate) return "Kies wanneer je plan en je eerste training beginnen.";
+      if (data.firstTrainingDate < data.planStartDate) return "Je eerste training kan niet vóór de start van je plan vallen.";
+      if (data.targetDate && data.firstTrainingDate >= data.targetDate) return "Je eerste training moet vóór je doeldatum vallen.";
+    }
     if (step === availabilityStep && data.trainingDays.length < data.sessionsPerWeek) {
       return `Kies minstens ${data.sessionsPerWeek} beschikbare dagen.`;
+    }
+    if (step === availabilityStep && !data.trainingDays.includes(weekdayFromIso(data.firstTrainingDate))) {
+      return "De gekozen eerste trainingsdag moet ook bij je beschikbare dagen staan.";
     }
     return null;
   }
@@ -284,6 +324,29 @@ export function NewPlanWizard({
     });
   }
 
+  function selectPlanStart(date: Date | undefined) {
+    const planStartDate = dateToIso(date);
+    if (!planStartDate) return;
+    update({
+      planStartDate,
+      firstTrainingDate: data.firstTrainingDate < planStartDate
+        ? firstAvailableDate(planStartDate, data.trainingDays)
+        : data.firstTrainingDate,
+    });
+  }
+
+  function selectFirstTraining(date: Date | undefined) {
+    const firstTrainingDate = dateToIso(date);
+    if (!firstTrainingDate) return;
+    const firstDay = weekdayFromIso(firstTrainingDate);
+    update({
+      firstTrainingDate,
+      trainingDays: data.trainingDays.includes(firstDay)
+        ? data.trainingDays
+        : [...data.trainingDays, firstDay],
+    });
+  }
+
   async function submit() {
     if (!data.goalType) return;
     setSubmitting(true);
@@ -293,6 +356,8 @@ export function NewPlanWizard({
       targetDistanceM: needsGoalDetails ? selectedDistance : null,
       targetDate: needsGoalDetails ? data.targetDate : null,
       targetTimeS: needsGoalDetails && data.targetTime ? parseClock(data.targetTime) : null,
+      planStartDate: data.planStartDate,
+      firstTrainingDate: data.firstTrainingDate,
       currentCapacityM: Number(data.currentCapacityKm.replace(",", ".")) * 1000,
       currentWeeklyVolumeM: Number(data.currentWeeklyVolumeKm.replace(",", ".")) * 1000,
       benchmarkDistanceM: data.benchmarkDistanceKm ? Number(data.benchmarkDistanceKm.replace(",", ".")) * 1000 : null,
@@ -310,10 +375,6 @@ export function NewPlanWizard({
     setRequestId(result.requestId);
     setRequestState("requested");
   }
-
-  const baselineStep = needsGoalDetails ? 2 : 1;
-  const availabilityStep = needsGoalDetails ? 3 : 2;
-  const reviewStep = needsGoalDetails ? 4 : 3;
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
@@ -446,6 +507,76 @@ export function NewPlanWizard({
                 </section>
               ) : null}
 
+              {step === planStartStep ? (
+                <section>
+                  <div className="label">Startmoment</div>
+                  <h3 className="mt-1.5 text-[18px] font-semibold">Wanneer moet je nieuwe schema beginnen?</h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                    De planstart opent je trainingsblok. Je eerste training mag op die dag of enkele dagen later vallen.
+                  </p>
+
+                  <div className="mt-5 grid gap-3">
+                    <div className="rounded-[17px] border border-line bg-s2/55 p-3.5">
+                      <div className="flex items-start gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-recovery/10 text-recovery">
+                          <CalendarDays className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-semibold">Start van het schema</div>
+                          <p className="mt-0.5 text-[10px] leading-relaxed text-faint">Vanaf deze datum gelden het nieuwe blok en de opbouwregels.</p>
+                        </div>
+                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button type="button" variant="secondary" className="mt-3 w-full justify-start normal-case tracking-normal">
+                            <CalendarDays />{formatDate(data.planStartDate)}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-1" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={new Date(`${data.planStartDate}T12:00:00`)}
+                            onSelect={selectPlanStart}
+                            disabled={{ before: startOfToday() }}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="rounded-[17px] border border-line bg-s2/55 p-3.5">
+                      <div className="flex items-start gap-3">
+                        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-run-easy/10 text-run-easy">
+                          <Route className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-semibold">Eerste trainingsdag</div>
+                          <p className="mt-0.5 text-[10px] leading-relaxed text-faint">De coach plant de eerste echte sessie precies op deze dag.</p>
+                        </div>
+                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button type="button" variant="secondary" className="mt-3 w-full justify-start normal-case tracking-normal">
+                            <CalendarDays />{formatDate(data.firstTrainingDate)}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-1" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={new Date(`${data.firstTrainingDate}T12:00:00`)}
+                            onSelect={selectFirstTraining}
+                            disabled={{ before: new Date(`${data.planStartDate}T00:00:00`) }}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 rounded-[13px] border border-line bg-canvas/35 px-3 py-2.5 text-[10px] leading-relaxed text-faint">
+                    {formatDate(data.firstTrainingDate)} wordt automatisch als beschikbare trainingsdag meegenomen in de volgende stap.
+                  </p>
+                </section>
+              ) : null}
+
               {step === availabilityStep ? (
                 <section>
                   <div className="label">Beschikbaarheid</div>
@@ -483,8 +614,10 @@ export function NewPlanWizard({
                     <div className="mt-3 divide-y divide-line text-[11px]">
                       <div className="flex justify-between gap-4 py-2"><span className="text-faint">Doel</span><span className="text-right font-semibold">{GOALS.find((goal) => goal.value === data.goalType)?.title}{needsGoalDetails ? ` · ${distanceName(selectedDistance)}` : ""}</span></div>
                       {data.targetDate ? <div className="flex justify-between gap-4 py-2"><span className="text-faint">Datum</span><span className="text-right font-semibold">{formatDate(data.targetDate)}</span></div> : null}
-                      {data.targetTime ? <div className="flex justify-between gap-4 py-2"><span className="text-faint">Tijd</span><span className="text-right font-semibold">{data.targetTime}</span></div> : null}
+                      {needsGoalDetails && data.targetTime ? <div className="flex justify-between gap-4 py-2"><span className="text-faint">Tijd</span><span className="text-right font-semibold">{data.targetTime}</span></div> : null}
                       <div className="flex justify-between gap-4 py-2"><span className="text-faint">Startpunt</span><span className="text-right font-semibold">{data.currentCapacityKm} km · {data.currentWeeklyVolumeKm} km/week</span></div>
+                      <div className="flex justify-between gap-4 py-2"><span className="text-faint">Planstart</span><span className="text-right font-semibold">{formatDate(data.planStartDate)}</span></div>
+                      <div className="flex justify-between gap-4 py-2"><span className="text-faint">Eerste training</span><span className="text-right font-semibold">{formatDate(data.firstTrainingDate)}</span></div>
                       <div className="flex justify-between gap-4 py-2"><span className="text-faint">Planning</span><span className="text-right font-semibold">{data.sessionsPerWeek}×/week · lang op {dayName(data.longRunDay)}</span></div>
                     </div>
                   </div>
