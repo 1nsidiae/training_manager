@@ -1,0 +1,22 @@
+.git
+.github
+.claude
+.venv
+.pnpm-store
+# Dit bestand geldt voor de worker-build (context = repo-root). Die kopieert
+# alleen pyproject, uv.lock en de tm_*-pakketten; de web-app zou verder niets
+# doen dan de context opblazen. `web` heeft zijn eigen .dockerignore.
+web
+tests
+docs
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.next
+.env
+.env.*
+!.env.example
+!.env.production.example
+secrets
+caddy_data
+caddy_config

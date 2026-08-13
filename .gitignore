@@ -1,0 +1,34 @@
+# Secrets — nooit committen
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.pem
+garmin_tokens.json
+.garminconnect/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.pnpm-store/
+.next/
+out/
+.vercel/
+
+# Lokale deploymentdata
+secrets/
+caddy_data/
+caddy_config/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/

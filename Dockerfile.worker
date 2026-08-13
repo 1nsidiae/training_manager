@@ -1,0 +1,22 @@
+# De basis is instelbaar zodat je hem kunt vastzetten of tijdelijk kunt
+# omruilen zonder dit bestand te wijzigen:
+#   docker compose build --build-arg PYTHON_IMAGE=python:3.12 worker
+ARG PYTHON_IMAGE=python:3.12-slim
+FROM ${PYTHON_IMAGE}
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY tm_sync ./tm_sync
+COPY tm_coach ./tm_coach
+COPY tm_worker ./tm_worker
+# /tokens is in productie een bind-mount; deze chown geldt alleen voor de image.
+# De rechten op de host zet je zelf — zie docs/DEPLOYMENT.md.
+RUN mkdir -p /tokens && chown -R 1000:1000 /app /tokens
+USER 1000:1000
+# Healthcheck en CMD draaien allebei via de venv-interpreter, niet via `python`.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=90s --retries=3 \
+  CMD ["/app/.venv/bin/python", "-m", "tm_worker.health"]
+CMD ["/app/.venv/bin/python", "-m", "tm_worker", "serve"]

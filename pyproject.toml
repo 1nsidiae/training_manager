@@ -1,0 +1,16 @@
+[project]
+name = "training-manager-sync"
+version = "0.1.0"
+description = "Garmin sync worker voor de training manager"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.121.0",
+    "garminconnect>=0.3.2",
+    "python-dotenv>=1.2.2",
+    "supabase>=2.31.0",
+]
+
+# Alleen voor de tests. Het Dockerfile draait `uv sync --no-dev`, dus dit komt
+# niet in de productie-image terecht.
+[dependency-groups]
+dev = ["pytest>=8.0"]

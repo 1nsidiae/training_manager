@@ -1,0 +1,89 @@
+name: training-manager
+
+# Elke container krijgt alleen de secrets die hij zelf gebruikt. Eén gedeelde
+# `env_file` was makkelijker, maar gaf `web` en `caddy` ook de Supabase
+# service-role key — de sleutel die alle RLS omzeilt — terwijl `web` juist het
+# enige onderdeel is dat aan het internet hangt. Compose leest `.env.production`
+# nog steeds voor de substituties hieronder; wat in de container belandt staat
+# per service uitgeschreven.
+
+services:
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    environment:
+      # Publieke waarden; ook nodig bij server-side rendering, niet alleen in de
+      # browserbundle.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      # De coachchat draait als server action in deze container.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - app
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      FIT_BUCKET: ${FIT_BUCKET:-garmin-fit}
+      GARMIN_THROTTLE_S: ${GARMIN_THROTTLE_S:-0.7}
+      GARMIN_TOKENSTORE: /tokens
+      TM_WORKER_HEARTBEAT: /tmp/tm_worker.heartbeat
+    volumes:
+      - ${GARMIN_TOKENSTORE_HOST:-./secrets/garminconnect}:/tokens
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      # Een worker die vastloopt zonder te crashen blijft anders "up" heten.
+      # De lus schrijft elke poll een hartslag; deze controle kijkt of die
+      # recent genoeg is.
+      test: ["CMD", "/app/.venv/bin/python", "-m", "tm_worker.health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - app
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - app
+
+networks:
+  app:
+
+volumes:
+  caddy_data:
+  caddy_config:
