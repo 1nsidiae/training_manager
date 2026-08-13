@@ -12,6 +12,7 @@ import logging
 import sys
 from datetime import date, timedelta
 
+from . import clock
 from . import activities as activities_mod
 from . import features as features_mod
 from . import profile as profile_mod
@@ -78,11 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     log = logging.getLogger("tm_sync")
 
-    today = date.today().isoformat()
+    today = clock.today().isoformat()
     if args.command == "backfill":
         start = args.start or FIRST_DATA_DAY
     else:
-        start = args.start or (date.today() - timedelta(days=14)).isoformat()
+        start = args.start or (clock.today() - timedelta(days=14)).isoformat()
     end = args.end or today
 
     settings = load_settings()

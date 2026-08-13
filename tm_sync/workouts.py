@@ -25,6 +25,8 @@ from garminconnect.workout import (
 )
 from supabase import Client
 
+from . import clock
+
 
 SUPPORTED_SESSION_TYPES = {"easy", "recovery", "long", "tempo", "interval", "walk_run", "race"}
 
@@ -494,7 +496,7 @@ def apply_active_plan(
     if not active:
         raise ValueError("Alleen het actieve plan kan naar Garmin worden gestuurd.")
 
-    start = (from_day or date.today()).isoformat()
+    start = (from_day or clock.today()).isoformat()
     removed = 0
     pushed = 0
     ignored = 0

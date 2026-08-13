@@ -19,6 +19,8 @@ from typing import Any
 
 from supabase import Client
 
+from . import clock
+
 log = logging.getLogger(__name__)
 
 # Zonegewichten voor de TRIMP-achtige fallback als Garmin geen trainingload geeft.
@@ -157,7 +159,7 @@ def compute_weekly(sb: Client) -> int:
         return 0
 
     first = date.fromisoformat(min(daily))
-    last = max(date.fromisoformat(max(daily)), date.today())
+    last = max(date.fromisoformat(max(daily)), clock.today())
 
     def load_on(day: date) -> float:
         row = daily.get(day.isoformat())
@@ -349,7 +351,7 @@ def _estimate(
     vo2 = [float(r["vo2max"]) for r in runs if r.get("vo2max")]
 
     return {
-        "day": date.today().isoformat(),
+        "day": clock.today().isoformat(),
         "scope": scope,
         "window_days": window_days,
         "critical_speed_m_per_s": round(fastest[0] / fastest[1], 4),
@@ -371,7 +373,7 @@ def compute_fitness_estimates(sb: Client) -> int:
     )
     runs = [a for a in activities if a["sport"] in RUNNING_SPORTS]
 
-    cutoff = (date.today() - timedelta(days=CURRENT_WINDOW_DAYS)).isoformat()
+    cutoff = (clock.today() - timedelta(days=CURRENT_WINDOW_DAYS)).isoformat()
     recent = [r for r in runs if str(r["start_time_local"])[:10] >= cutoff]
 
     rows = []

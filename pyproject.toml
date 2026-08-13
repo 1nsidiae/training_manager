@@ -8,6 +8,10 @@ dependencies = [
     "garminconnect>=0.3.2",
     "python-dotenv>=1.2.2",
     "supabase>=2.31.0",
+    # Windows heeft geen tijdzonedatabase en een slanke container soms ook niet.
+    # Zonder dit valt tm_sync.clock terug op de systeemtijd, en juist die is op
+    # de VPS UTC — precies wat we wilden repareren.
+    "tzdata>=2025.1",
 ]
 
 # Alleen voor de tests. Het Dockerfile draait `uv sync --no-dev`, dus dit komt

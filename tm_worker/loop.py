@@ -17,6 +17,7 @@ from supabase import Client
 from tm_coach.engine import generate_plan
 from tm_sync import activities as activities_mod
 from tm_sync import features, profile as profile_mod, wellness as wellness_mod
+from tm_sync import clock
 from tm_sync import tokens as tokens_mod
 from tm_sync import workouts as workouts_mod
 from tm_sync.clients import garmin_client, supabase_client
@@ -154,7 +155,7 @@ def next_interval_minutes(sb: Client, now: datetime | None = None) -> int:
     Dicht wanneer er iets te halen valt, rustig wanneer niet. Zonder dit zou de
     worker de hele nacht doorpollen voor data die pas 's ochtends bestaat.
     """
-    now = now or datetime.now()
+    now = now or clock.now()
     if now.hour in MORNING_WINDOW:
         return DENSE_MINUTES
 
@@ -198,7 +199,7 @@ def check_token_expiry(sb: Client, settings: Settings) -> dict[str, Any] | None:
         warning["action"],
     )
 
-    today = date.today().isoformat()
+    today = clock.today().isoformat()
     sync_type = f"garmin_token_expiry:{today}"
     already = (
         sb.table("sync_log").select("id").eq("sync_type", sync_type).limit(1).execute().data
@@ -283,7 +284,7 @@ def tick(
     with_sync: bool = True,
     with_coach: bool = True,
 ) -> dict[str, Any]:
-    today = date.today()
+    today = clock.today()
     result: dict[str, Any] = {"synced": 0, "triggers": [], "plan": None}
 
     try:

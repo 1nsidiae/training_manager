@@ -14,6 +14,7 @@ import sys
 import time
 from datetime import datetime
 
+from tm_sync import clock
 from tm_sync.clients import supabase_client
 from tm_sync.config import load_settings
 
@@ -67,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:  # noqa: BLE001 - een tick mag de worker niet vellen
             log.exception("tick mislukt; volgende poging volgens schema")
 
-        minutes = next_interval_minutes(sb, datetime.now())
+        minutes = next_interval_minutes(sb, clock.now())
         log.info("volgende tick over %d minuten (of eerder bij een sync-aanvraag)", minutes)
 
         # In stukjes slapen, zodat een druk op de knop in de app niet een half

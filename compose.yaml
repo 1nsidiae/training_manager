@@ -45,6 +45,10 @@ services:
       GARMIN_THROTTLE_S: ${GARMIN_THROTTLE_S:-0.7}
       GARMIN_TOKENSTORE: /tokens
       TM_WORKER_HEARTBEAT: /tmp/tm_worker.heartbeat
+      # De code rekent zelf met deze zone; TZ zet alleen de logtijden gelijk
+      # zodat containerlogs en database dezelfde klok tonen.
+      TM_TIMEZONE: ${TM_TIMEZONE:-Europe/Brussels}
+      TZ: ${TM_TIMEZONE:-Europe/Brussels}
     volumes:
       - ${GARMIN_TOKENSTORE_HOST:-./secrets/garminconnect}:/tokens
     restart: unless-stopped

@@ -12,6 +12,8 @@ from typing import Any
 
 from supabase import Client
 
+from tm_sync import clock
+
 from tm_sync import compliance
 
 RECENT_DAYS = 21
@@ -27,7 +29,7 @@ def _one(sb: Client, table: str, columns: str = "*", **filters: Any) -> dict | N
 
 
 def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[str, Any]:
-    today = date.today()
+    today = clock.today()
 
     profile = _one(sb, "athlete_profile") or {}
 

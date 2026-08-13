@@ -95,7 +95,7 @@ def mark_skipped(sb: Client, plan_id: int, today: date) -> list[int]:
 
 
 def detect(sb: Client, today: date | None = None) -> list[Trigger]:
-    today = today or date.today()
+    today = today or clock.today()
     handled = _handled_keys(sb)
     params = _rule_params(sb)
     found: list[Trigger] = []

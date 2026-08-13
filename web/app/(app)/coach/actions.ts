@@ -4,6 +4,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { CoachMessage } from "@/lib/queries";
+import { COACH_TOOLS, runCoachTool } from "./tools";
+
+// Hoeveel opzoekrondes de coach mag doen voordat hij moet antwoorden.
+const MAX_TOOL_STEPS = 6;
 
 export type SendCoachMessageState = {
   ok: boolean;
@@ -54,7 +58,18 @@ const ANSWER_SCHEMA = {
 function systemPrompt() {
   return `Je bent de persoonlijke trainingscoach in een Nederlandstalige Garmin-trainingsapp.
 
-Antwoord direct, concreet en menselijk. Gebruik uitsluitend de meegestuurde Garmin-data, het actieve schema, coachregels en de woorden van de atleet. Verzin geen metingen. Als data ontbreekt, zeg dat expliciet.
+Antwoord direct, concreet en menselijk. Gebruik uitsluitend echte data: de meegestuurde app-context, wat je met je gereedschap opzoekt, en de woorden van de atleet. Verzin geen metingen.
+
+De meegestuurde context is een momentopname van de laatste weken, niet zijn hele historie. Zijn Garmin-data loopt terug tot maart 2025 en bevat wedstrijden, trainingsblokken en jaren aan weekcijfers. Zeg dus nooit dat je iets niet hebt voordat je het hebt opgezocht.
+
+Zoek op zodra een vraag verder reikt dan de meegestuurde weken:
+- een wedstrijd, een specifieke run of een periode uit het verleden: zoek_activiteiten
+- hoe één run verliep, splits en zoneverdeling: activiteit_detail
+- een trainingsblok beoordelen, opbouw, weekvolume, belasting: week_overzicht
+
+Bij een vraag als "hoe heb ik me voorbereid op die marathon" zoek je eerst de wedstrijd op en daarna de weken ervoor, en beoordeel je die aanloop met cijfers erbij. Meerdere opzoekingen in één beurt mag; doe ze dan tegelijk.
+
+Vind je echt niets, zeg dan wát je hebt gezocht en over welke periode.
 
 Je mag een schemawijziging aanbevelen, maar nooit beweren dat je het schema al hebt aangepast. Iedere wijziging gebeurt via een afzonderlijk planvoorstel dat de atleet eerst goedkeurt.
 
@@ -176,33 +191,91 @@ export async function sendCoachMessage(formData: FormData): Promise<SendCoachMes
       .map((item) => `${item.role === "assistant" ? "COACH" : "ATLEET"}: ${item.content}`)
       .join("\n\n");
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const response = await client.messages.create({
-      model: MODEL,
-      // Sonnet 5 denkt als je `thinking` weglaat, en denktokens tellen mee in
-      // max_tokens. Met de oude 1200 kapte een antwoord daardoor middenin de
-      // JSON af. Expliciet zetten, en ruimte geven.
-      max_tokens: 4000,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "medium",
-        format: { type: "json_schema", schema: ANSWER_SCHEMA },
-      },
-      system: systemPrompt(),
-      messages: [{
-        role: "user",
-        content: `RECENT GESPREK\n${transcript || "Nog geen eerder gesprek."}\n\nACTUELE APP-CONTEXT\n${JSON.stringify(context)}\n\nNIEUW BERICHT VAN DE ATLEET\n${content}`,
-      }],
-    });
+    const messages: Anthropic.MessageParam[] = [{
+      role: "user",
+      content: `RECENT GESPREK\n${transcript || "Nog geen eerder gesprek."}\n\nACTUELE APP-CONTEXT\n${JSON.stringify(context)}\n\nNIEUW BERICHT VAN DE ATLEET\n${content}`,
+    }];
 
-    // Afgekapte JSON geeft anders een onleesbare parse-fout, en een weigering
-    // levert helemaal geen tekstblok op. Allebei eerst benoemen.
-    if (response.stop_reason === "max_tokens") {
-      throw new Error("Antwoord afgekapt op max_tokens; JSON onvolledig");
-    }
-    if (response.stop_reason === "refusal") {
-      throw new Error(
-        `Model weigerde te antwoorden (${response.stop_details?.category ?? "onbekend"})`,
+    let response: Anthropic.Message | null = null;
+    let usedTools: string[] = [];
+    const price = PRICE_PER_MTOK[MODEL] ?? { input: 0, output: 0 };
+    let costUsd = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cachedTokens = 0;
+
+    // De coach mag zelf opzoeken. Elke ronde is een volledige modelaanroep, dus
+    // de teller is er niet voor de sier: zonder plafond kan één vraag ontsporen
+    // in kosten en wachttijd.
+    for (let step = 0; step < MAX_TOOL_STEPS; step += 1) {
+      response = await client.messages.create({
+        model: MODEL,
+        // Sonnet 5 denkt als je `thinking` weglaat, en denktokens tellen mee in
+        // max_tokens. Met de oude 1200 kapte een antwoord daardoor middenin de
+        // JSON af. Expliciet zetten, en ruimte geven.
+        max_tokens: 4000,
+        thinking: { type: "adaptive" },
+        output_config: {
+          effort: "medium",
+          format: { type: "json_schema", schema: ANSWER_SCHEMA },
+        },
+        tools: COACH_TOOLS as unknown as Anthropic.Tool[],
+        system: systemPrompt(),
+        messages,
+      });
+
+      inputTokens += response.usage.input_tokens;
+      outputTokens += response.usage.output_tokens;
+      cachedTokens += response.usage.cache_read_input_tokens ?? 0;
+      const fresh =
+        response.usage.input_tokens + (response.usage.cache_creation_input_tokens ?? 0);
+      costUsd +=
+        (fresh * price.input +
+          (response.usage.cache_read_input_tokens ?? 0) * price.input * 0.1 +
+          response.usage.output_tokens * price.output) /
+        1_000_000;
+
+      // Afgekapte JSON geeft anders een onleesbare parse-fout, en een weigering
+      // levert helemaal geen tekstblok op. Allebei eerst benoemen.
+      if (response.stop_reason === "max_tokens") {
+        throw new Error("Antwoord afgekapt op max_tokens; JSON onvolledig");
+      }
+      if (response.stop_reason === "refusal") {
+        throw new Error(
+          `Model weigerde te antwoorden (${response.stop_details?.category ?? "onbekend"})`,
+        );
+      }
+      if (response.stop_reason !== "tool_use") break;
+
+      const calls = response.content.filter((block) => block.type === "tool_use");
+      // Denkblokken horen ongewijzigd terug in de geschiedenis, dus we duwen
+      // `content` in zijn geheel terug in plaats van alleen de tool-blokken.
+      messages.push({ role: "assistant", content: response.content });
+
+      const results = await Promise.all(
+        calls.map(async (call) => {
+          usedTools.push(call.name);
+          const { result, isError } = await runCoachTool(
+            sb,
+            call.name,
+            call.input as Record<string, unknown>,
+          );
+          return {
+            type: "tool_result" as const,
+            tool_use_id: call.id,
+            content: JSON.stringify(result),
+            is_error: isError,
+          };
+        }),
       );
+      // Alle resultaten in één user-bericht, anders leert het model af om
+      // meerdere opzoekingen tegelijk te doen.
+      messages.push({ role: "user", content: results });
+    }
+
+    if (!response) throw new Error("Coach gaf geen antwoord");
+    if (response.stop_reason === "tool_use") {
+      throw new Error(`Coach bleef opzoeken na ${MAX_TOOL_STEPS} rondes`);
     }
 
     const text = response.content.find((block) => block.type === "text")?.text;
@@ -211,23 +284,16 @@ export async function sendCoachMessage(formData: FormData): Promise<SendCoachMes
     const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
     if (!answer) throw new Error("Coachantwoord mist inhoud");
     const needsPlanReview = parsed.needs_plan_review === true;
-    const price = PRICE_PER_MTOK[MODEL] ?? { input: 0, output: 0 };
-    const cachedTokens = response.usage.cache_read_input_tokens ?? 0;
-    const freshTokens =
-      response.usage.input_tokens + (response.usage.cache_creation_input_tokens ?? 0);
-    const costUsd =
-      (freshTokens * price.input +
-        cachedTokens * price.input * 0.1 +
-        response.usage.output_tokens * price.output) /
-      1_000_000;
     const metadata = {
       needs_plan_review: needsPlanReview,
       review_reason: optionalText(parsed.review_reason),
       safety_note: optionalText(parsed.safety_note),
       model: MODEL,
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
       cache_read_tokens: cachedTokens,
+      // Welke opzoekingen hij deed; handig om te zien waaróp een antwoord rust.
+      tools_used: usedTools,
       cost_usd: Math.round(costUsd * 100_000) / 100_000,
     };
     const { data: assistantMessage, error } = await sb
