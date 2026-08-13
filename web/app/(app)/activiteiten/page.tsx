@@ -15,6 +15,7 @@ import { InteractiveBarChart, type InteractiveBarDatum } from "@/components/inte
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getActivePlan,
   getActivitiesPage,
@@ -182,26 +183,20 @@ function viewHref(view: "archive" | "trends", sport: string) {
 
 function ViewSwitch({ current, sport }: { current: "archive" | "trends"; sport: string }) {
   return (
-    <nav className="grid grid-cols-2 rounded-[15px] border border-line bg-s1 p-1" aria-label="Activiteitenweergave">
-      <Link
-        href={viewHref("archive", sport)}
-        className={cn(
-          "focus-ring flex min-h-10 items-center justify-center gap-2 rounded-[11px] text-[10px] font-bold uppercase tracking-[0.08em] transition-colors",
-          current === "archive" ? "bg-s3 text-ink" : "text-faint hover:text-muted",
-        )}
-      >
-        <ListFilter className="size-3.5" /> Activiteiten
-      </Link>
-      <Link
-        href={viewHref("trends", sport)}
-        className={cn(
-          "focus-ring flex min-h-10 items-center justify-center gap-2 rounded-[11px] text-[10px] font-bold uppercase tracking-[0.08em] transition-colors",
-          current === "trends" ? "bg-s3 text-ink" : "text-faint hover:text-muted",
-        )}
-      >
-        <BarChart3 className="size-3.5" /> Trends
-      </Link>
-    </nav>
+    <Tabs value={current}>
+      <TabsList aria-label="Activiteitenweergave">
+        <TabsTrigger value="archive" asChild>
+          <Link href={viewHref("archive", sport)}>
+            <ListFilter /> Activiteiten
+          </Link>
+        </TabsTrigger>
+        <TabsTrigger value="trends" asChild>
+          <Link href={viewHref("trends", sport)}>
+            <BarChart3 /> Trends
+          </Link>
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   );
 }
 

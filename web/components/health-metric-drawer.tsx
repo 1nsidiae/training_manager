@@ -14,6 +14,9 @@ import {
   MoonStar,
 } from "lucide-react";
 import { InteractiveTrendChart, type TrendPoint } from "@/components/interactive-trend-chart";
+import { InteractiveDayChart } from "@/components/interactive-day-chart";
+import { InteractiveStepsChart } from "@/components/interactive-steps-chart";
+import { SleepStageTimeline } from "@/components/sleep-stage-timeline";
 import { Sparkline } from "@/components/sparkline";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -36,7 +39,14 @@ export type HealthMetricKind =
   | "sleep_score"
   | "vo2max";
 
-type Period = "7" | "28" | "90";
+type Period = "1" | "7" | "28" | "365";
+
+const PERIOD_LABELS: Record<Period, string> = {
+  "1": "1 dag",
+  "7": "7 dagen",
+  "28": "4 weken",
+  "365": "1 jaar",
+};
 
 type Props = {
   kind: HealthMetricKind;
@@ -163,7 +173,7 @@ function toneFor(delta: number | null, direction: MetricConfig["goodDirection"] 
 
 export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }: Props) {
   const config = kind === "vo2max" ? VO2_CONFIG : METRICS[kind];
-  const [period, setPeriod] = useState<Period>(kind === "vo2max" ? "90" : "28");
+  const [period, setPeriod] = useState<Period>("28");
   const days = Number(period);
   const allPoints = useMemo<TrendPoint[]>(() => {
     if (kind === "vo2max") return vo2max;
@@ -172,6 +182,9 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
   }, [kind, vo2max, wellness]);
   const measured = allPoints.filter((point) => point.value != null && point.day <= selectedDay);
   const current = measured.at(-1) ?? null;
+  const selectedWellness = wellness.find((row) => row.day === selectedDay) ?? null;
+  const stepBuckets = selectedWellness?.raw?.steps_detail?.buckets ?? [];
+  const intraday = selectedWellness?.raw?.intraday_detail;
 
   function pointsBetween(start: string, end: string) {
     return allPoints.filter((point) => point.day >= start && point.day <= end);
@@ -273,17 +286,18 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
 
           <Tabs value={period} onValueChange={(value) => setPeriod(value as Period)} className="mt-4">
             <TabsList>
+              <TabsTrigger value="1">1 dag</TabsTrigger>
               <TabsTrigger value="7">7 dagen</TabsTrigger>
-              <TabsTrigger value="28">28 dagen</TabsTrigger>
-              <TabsTrigger value="90">3 maanden</TabsTrigger>
+              <TabsTrigger value="28">4 weken</TabsTrigger>
+              <TabsTrigger value="365">1 jaar</TabsTrigger>
             </TabsList>
           </Tabs>
 
           <Card className="mt-4 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="label">Ontwikkeling</div>
-                <div className="mt-1 text-[13px] font-semibold">Laatste {days === 90 ? "3 maanden" : `${days} dagen`}</div>
+                <div className="label">{kind === "steps" && period === "1" ? "Dagverloop" : "Ontwikkeling"}</div>
+                <div className="mt-1 text-[13px] font-semibold">Laatste {PERIOD_LABELS[period]}</div>
               </div>
               <div className={cn("inline-flex h-7 items-center gap-1 rounded-md border px-2", toneFor(periodDelta, config.goodDirection))}>
                 <PeriodIcon className="size-3.5" />
@@ -291,12 +305,50 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
               </div>
             </div>
             <div className="mt-3">
-              <InteractiveTrendChart
-                data={chartData}
-                color={config.color}
-                average={periodAverage}
-                formatValue={(value) => formatter(value, true)}
-              />
+              {period === "1" ? (
+                kind === "steps" ? (
+                  <InteractiveStepsChart buckets={stepBuckets} color={config.color} />
+                ) : kind === "body_battery" ? (
+                  <InteractiveDayChart
+                    data={intraday?.body_battery ?? []}
+                    color={config.color}
+                    formatValue={(value) => formatter(value, true)}
+                  />
+                ) : kind === "stress" ? (
+                  <InteractiveDayChart
+                    data={intraday?.stress ?? []}
+                    color={config.color}
+                    formatValue={(value) => formatter(value, true)}
+                  />
+                ) : kind === "resting_hr" ? (
+                  <InteractiveDayChart
+                    data={intraday?.heart_rate ?? []}
+                    color={config.color}
+                    reference={selectedWellness?.resting_hr}
+                    formatValue={(value) => value == null ? "–" : `${Math.round(value)} bpm`}
+                  />
+                ) : kind === "sleep_score" && selectedWellness ? (
+                  <div className="pt-1">
+                    <SleepStageTimeline wellness={selectedWellness} />
+                  </div>
+                ) : (
+                  <div className="grid min-h-[220px] place-items-center px-5 text-center">
+                    <div>
+                      <div className="text-[12px] font-semibold text-muted">Eén Garmin-assessment voor deze dag</div>
+                      <p className="mt-1.5 text-[10px] leading-relaxed text-faint">
+                        VO2max wordt tijdens geschikte hardloopsessies berekend en heeft geen zinvol verloop binnen één dag.
+                      </p>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <InteractiveTrendChart
+                  data={chartData}
+                  color={config.color}
+                  average={periodAverage}
+                  formatValue={(value) => formatter(value, true)}
+                />
+              )}
             </div>
           </Card>
 

@@ -106,8 +106,10 @@ export default async function TodayPage({
       plan ? getPlanSessions(plan.id) : Promise.resolve([]),
       previousPlan ? getPlanSessions(previousPlan.id) : Promise.resolve([]),
       proposed ? getPlanSessions(proposed.id) : Promise.resolve([]),
-      getWellnessWindow(selectedDay, 180),
-      getVo2MaxWindow(selectedDay, 180),
+      // Twee jaar dekking houdt zowel de gekozen jaartrend als de vorige
+      // jaarperiode beschikbaar voor de vergelijking in de KPI-drawers.
+      getWellnessWindow(selectedDay, 730),
+      getVo2MaxWindow(selectedDay, 730),
       getRuleParams(),
       getAthlete(),
       getLastGarminSync(),
@@ -213,7 +215,7 @@ export default async function TodayPage({
   const completion = weekSessions.length ? (doneSessions.length / weekSessions.length) * 100 : 0;
 
   return (
-    <main className="space-y-4">
+    <main className="space-y-5">
       <TodayHeader
         initials={initials}
         lastSyncAt={lastSync?.finished_at}
@@ -431,15 +433,27 @@ export default async function TodayPage({
                 const d = new Date(`${weekStart}T12:00:00`);
                 d.setDate(d.getDate() + i);
                 const iso = d.toISOString().slice(0, 10);
-                const daySession = weekSessions.find((x) => x.day === iso);
-                const dayMeta = daySession ? SESSION_META[daySession.session_type] : null;
+                const daySessions = weekSessions.filter((session) => session.day === iso);
+                const sessionLabels = daySessions.map((session) => SESSION_META[session.session_type].label);
                 const isSelected = iso === selectedDay;
-                const isDone = daySession?.status === "completed";
                 return (
                   <div key={iso} className="flex flex-1 flex-col items-center gap-1.5">
                     <span className={`text-[9px] font-semibold ${isSelected ? "text-ink" : "text-faint"}`}>{letter}</span>
-                    <div className={`relative h-8 w-full rounded-lg ${dayMeta ? dayMeta.dot : "bg-s3/70"} ${!daySession ? "opacity-40" : ""} ${isSelected ? "brightness-110" : ""}`}>
-                      {isDone ? <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-canvas/65" /> : null}
+                    <div
+                      className={`flex h-8 w-full flex-col gap-[2px] overflow-hidden rounded-lg bg-s3/70 p-[2px] ${!daySessions.length ? "opacity-40" : ""} ${isSelected ? "brightness-110" : ""}`}
+                      aria-label={`${iso}: ${sessionLabels.length ? sessionLabels.join(" en ") : "rustdag"}`}
+                      title={sessionLabels.length ? sessionLabels.join(" + ") : "Rustdag"}
+                    >
+                      {daySessions.map((daySession) => (
+                        <span
+                          key={daySession.id}
+                          className={`relative min-h-0 flex-1 rounded-[5px] ${SESSION_META[daySession.session_type].dot}`}
+                        >
+                          {daySession.status === "completed" ? (
+                            <span className="absolute inset-x-1 bottom-0.5 h-0.5 rounded-full bg-canvas/65" />
+                          ) : null}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 );

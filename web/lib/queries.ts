@@ -101,6 +101,7 @@ export type Wellness = {
   steps: number | null;
   synced_at: string | null;
   raw: {
+    daily_summary?: Record<string, unknown>;
     sleep_detail?: {
       start_local_ms: number | null;
       end_local_ms: number | null;
@@ -109,6 +110,18 @@ export type Wellness = {
         end_gmt: string;
         level: number;
       }[];
+    };
+    steps_detail?: {
+      buckets: {
+        start_gmt: string;
+        end_gmt: string;
+        steps: number;
+      }[];
+    };
+    intraday_detail?: {
+      stress: { timestamp_ms: number; value: number }[];
+      body_battery: { timestamp_ms: number; value: number }[];
+      heart_rate: { timestamp_ms: number; value: number }[];
     };
   } | null;
 };

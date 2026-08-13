@@ -14,7 +14,7 @@ const TABS = [
 
 const COACH_TAB = { href: "/coach", label: "Coach", icon: Bot };
 
-/** Vier bestemmingen in een zwevende capsule, met Coach als aparte ronde
+/** Vier bestemmingen in een zwevende capsule, met Coach als aparte
  *  actieknop. De compositie volgt de aangeleverde mobiele referentie zonder
  *  het WHOOP-logo na te bootsen. */
 export function BottomNav() {
@@ -63,7 +63,7 @@ export function BottomNav() {
           aria-label={COACH_TAB.label}
           aria-current={coachActive ? "page" : undefined}
           className={cn(
-            "nav-glass focus-ring grid size-[64px] shrink-0 touch-manipulation select-none place-items-center rounded-full border transition-[color,border-color,transform] active:scale-[0.96]",
+            "nav-glass focus-ring grid size-[64px] shrink-0 touch-manipulation select-none place-items-center rounded-[24px] border transition-[color,border-color,transform] active:scale-[0.96]",
             coachActive
               ? "border-teal/40 text-teal"
               : "border-recovery/30 text-recovery",
@@ -71,7 +71,7 @@ export function BottomNav() {
         >
           <span
             className={cn(
-              "grid size-11 place-items-center rounded-full border bg-canvas/60 transition-colors",
+              "grid size-11 place-items-center rounded-[19px] border bg-canvas/60 transition-colors",
               coachActive ? "border-teal/35 bg-teal/10" : "border-line-strong",
             )}
           >

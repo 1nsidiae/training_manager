@@ -130,7 +130,7 @@ export function InteractiveTrendChart({ data, color, average, formatValue }: Pro
               dataKey="value"
               stroke={color}
               strokeWidth={2}
-              dot={false}
+              dot={measured.length === 1 ? { r: 5, fill: color, stroke: "#ffffff", strokeWidth: 2 } : false}
               activeDot={{ r: 5, fill: color, stroke: "#ffffff", strokeWidth: 2 }}
               connectNulls={false}
               isAnimationActive
