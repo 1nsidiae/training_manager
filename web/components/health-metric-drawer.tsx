@@ -284,9 +284,13 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
             </div>
           </div>
 
+          {/* VO2max wordt alleen tijdens geschikte hardloopsessies berekend en
+              beweegt over maanden, niet over uren. Een tabblad aanbieden dat
+              per definitie leeg blijft is een doodlopende weg — dus tonen we
+              hem daar niet. */}
           <Tabs value={period} onValueChange={(value) => setPeriod(value as Period)} className="mt-4">
             <TabsList>
-              <TabsTrigger value="1">1 dag</TabsTrigger>
+              {kind !== "vo2max" ? <TabsTrigger value="1">1 dag</TabsTrigger> : null}
               <TabsTrigger value="7">7 dagen</TabsTrigger>
               <TabsTrigger value="28">4 weken</TabsTrigger>
               <TabsTrigger value="365">1 jaar</TabsTrigger>
