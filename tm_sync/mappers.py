@@ -162,6 +162,17 @@ def map_hrv(entry: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def readiness_moment(entry: dict[str, Any]) -> str:
+    """Wanneer Garmin deze Training Readiness berekende.
+
+    Er zijn er meerdere per dag en ze komen niet op volgorde binnen. Sorteren op
+    dit tijdstip laat de nieuwste meting winnen. De ISO-tekst sorteert
+    lexicografisch goed; een lege waarde belandt vooraan en verliest dus, wat
+    precies is wat je wil.
+    """
+    return str(entry.get("timestamp") or entry.get("timestampLocal") or "")
+
+
 def map_readiness(entry: dict[str, Any]) -> dict[str, Any] | None:
     day = entry.get("calendarDate")
     if not day:

@@ -173,7 +173,12 @@ def sync_wellness(
         entries = safe_call(
             f"get_training_readiness({day})", garmin.get_training_readiness, day
         )
-        for entry in entries or []:
+        # Garmin herberekent Training Readiness meerdere keren per dag en geeft
+        # alle metingen terug, niet alleen de laatste — en niet op volgorde.
+        # `_merge` laat de laatste die hij ziet winnen, dus zonder sorteren won
+        # geregeld een meting van de avond ervoor en bleef de score hangen
+        # terwijl stappen en hartslag wél meebewogen.
+        for entry in sorted(entries or [], key=mappers.readiness_moment):
             _merge(days, mappers.map_readiness(entry))
 
         # De Garmin Daily Summary levert de officiële dagelijkse waarden voor
