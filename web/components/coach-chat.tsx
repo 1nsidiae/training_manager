@@ -16,9 +16,18 @@ const QUICK_MESSAGES = [
   "Waarom staat mijn volgende training hier?",
 ];
 const POLL_MS = 2_000;
-const REVIEW_TIMEOUT_MS = 5 * 60_000;
+// Een volledige Opus-herplanning kan na een guardrailcorrectie meerdere
+// minuten duren. Toon daarom niet voortijdig een fout terwijl de worker nog
+// aantoonbaar aan het rekenen is.
+const REVIEW_TIMEOUT_MS = 12 * 60_000;
 
 type ReviewState = "idle" | "requested" | "running" | "done" | "error";
+
+function reviewStateFromJob(status: string): ReviewState {
+  if (status === "ok") return "done";
+  if (status === "requested" || status === "running" || status === "error") return status;
+  return "idle";
+}
 
 function timeLabel(value: string) {
   return new Date(value).toLocaleTimeString("nl-BE", {
@@ -96,10 +105,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
         .eq("id", requestId)
         .maybeSingle();
       if (!data) return;
-      if (data.status === "running") {
-        setReviewStates((current) => ({ ...current, [messageId]: "running" }));
-        return;
-      }
       if (data.status === "ok") {
         window.clearInterval(timer);
         reviewPolls.current.delete(requestId);
@@ -112,8 +117,12 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
         setReviewStates((current) => ({ ...current, [messageId]: "error" }));
         setReviewErrors((current) => ({
           ...current,
-          [messageId]: data.error ?? "De planreview werd nog niet afgerond.",
+          [messageId]: data.error ?? "De planreview duurt abnormaal lang. De worker moet worden gecontroleerd.",
         }));
+        return;
+      }
+      if (data.status === "running") {
+        setReviewStates((current) => ({ ...current, [messageId]: "running" }));
       }
     }, POLL_MS);
   }
@@ -138,7 +147,10 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
           seen.add(job.sync_type);
           const messageId = Number(job.sync_type.split(":")[1]);
           if (!Number.isFinite(messageId)) continue;
-          setReviewStates((current) => ({ ...current, [messageId]: job.status as ReviewState }));
+          setReviewStates((current) => ({
+            ...current,
+            [messageId]: reviewStateFromJob(job.status),
+          }));
           if (job.error) setReviewErrors((current) => ({ ...current, [messageId]: job.error }));
           if (job.status === "requested" || job.status === "running") {
             void pollReview(messageId, job.id);
@@ -238,7 +250,7 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
                     </div>
                     {reviewState === "done" ? (
                       <Button asChild variant="metric" size="sm" className="mt-3 w-full">
-                        <Link href="/">Voorstel bekijken <ArrowUpRight /></Link>
+                        <Link href="/plan">Voorstel bekijken <ArrowUpRight /></Link>
                       </Button>
                     ) : (
                       <Button
@@ -248,10 +260,15 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
                         disabled={reviewBusy}
                         onClick={() => requestPlanReview(message.id)}
                       >
-                        {reviewBusy ? <LoaderCircle className="animate-spin" /> : reviewState === "error" ? null : <CalendarSync />}
-                        {reviewState === "running" ? "Schema beoordelen" : reviewState === "requested" ? "Review staat klaar" : reviewState === "error" ? "Opnieuw proberen" : "Schema laten beoordelen"}
+                        {reviewState === "running" ? <LoaderCircle className="animate-spin" /> : <CalendarSync />}
+                        {reviewState === "running" ? "Coach beoordeelt schema" : reviewState === "requested" ? "In wachtrij voor coach" : reviewState === "error" ? "Opnieuw proberen" : "Schema laten beoordelen"}
                       </Button>
                     )}
+                    {reviewState === "requested" ? (
+                      <p className="mt-2 text-[10px] leading-relaxed text-muted">
+                        De aanvraag is bewaard maar de coachworker heeft ze nog niet opgepakt.
+                      </p>
+                    ) : null}
                     {reviewErrors[message.id] ? (
                       <p className="mt-2 text-[10px] leading-relaxed text-danger">{reviewErrors[message.id]}</p>
                     ) : null}

@@ -176,6 +176,13 @@ export type PlanSyncLog = {
   finished_at: string | null;
 };
 
+export type GoalPlanRequest = {
+  id: number;
+  sync_type: string;
+  status: "requested" | "running" | "ok" | "error";
+  error: string | null;
+};
+
 export type CoachMessage = {
   id: number;
   user_id: string;
@@ -214,6 +221,19 @@ export async function getProposedPlan() {
     .eq("status", "proposed")
     .maybeSingle();
   return data as Plan | null;
+}
+
+/** Laatste doelwizardtaak, zodat de voortgang ook na navigeren zichtbaar blijft. */
+export async function getLatestGoalPlanRequest() {
+  const sb = await createClient();
+  const { data } = await sb
+    .from("sync_log")
+    .select("id, sync_type, status, error")
+    .like("sync_type", "goal_plan_review:%")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data as GoalPlanRequest | null;
 }
 
 export async function getPreviousPlan(plan: Plan) {

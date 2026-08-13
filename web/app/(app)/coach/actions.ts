@@ -20,6 +20,37 @@ const EMPTY_STATE: SendCoachMessageState = {
 };
 const MODEL = "claude-sonnet-5";
 
+// USD per miljoen tokens, naast het model in plaats van los in de berekening —
+// anders liegt het kostengetal zodra je van model wisselt.
+const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-haiku-4-5": { input: 1, output: 5 },
+};
+
+/** Vaste vorm voor het antwoord. Zonder dit blijft het gokken of het model
+ *  geldige JSON teruggeeft; met `additionalProperties: false` en een volledige
+ *  `required` staat de vorm vast. Leeg betekent "niet van toepassing" — een
+ *  nullable veld voegt hier niets toe behalve schemabeperkingen. */
+const ANSWER_SCHEMA = {
+  type: "object",
+  properties: {
+    answer: { type: "string", description: "Het antwoord in het Nederlands." },
+    intent: { type: "string", enum: ["question", "report"] },
+    needs_plan_review: { type: "boolean" },
+    review_reason: {
+      type: "string",
+      description: "Waarom het plan herzien moet worden, of leeg.",
+    },
+    safety_note: {
+      type: "string",
+      description: "Medische waarschuwing indien nodig, anders leeg.",
+    },
+  },
+  required: ["answer", "intent", "needs_plan_review", "review_reason", "safety_note"],
+  additionalProperties: false,
+} as const;
+
 function systemPrompt() {
   return `Je bent de persoonlijke trainingscoach in een Nederlandstalige Garmin-trainingsapp.
 
@@ -31,8 +62,9 @@ Als de atleet ziek is: geef geen diagnose. Stel hoogstens één relevante vervol
 
 Zet needs_plan_review alleen op true als het bericht de komende trainingen redelijkerwijs kan beïnvloeden: ziekte, pijn, blessure, aanhoudende uitzonderlijke vermoeidheid, onhaalbare planning of een expliciet verzoek om het plan te wijzigen. Een gewone vraag zet dit op false.
 
-Geef uitsluitend geldige JSON terug in deze vorm:
-{"answer":"antwoord in het Nederlands","intent":"question|report","needs_plan_review":false,"review_reason":null,"safety_note":null}`;
+Als je eerst een vervolgvraag stelt omdat essentiële informatie ontbreekt, zet je needs_plan_review op false. Er is dan nog niet genoeg informatie voor een degelijk voorstel. Pas nadat de atleet antwoordt en er voldoende context is, mag een volgend antwoord needs_plan_review op true zetten. Vraag nooit om een review en om ontbrekende informatie in hetzelfde antwoord.
+
+Laat review_reason en safety_note leeg wanneer ze niet van toepassing zijn.`;
 }
 
 async function buildContext(sb: Awaited<ReturnType<typeof createClient>>) {
@@ -80,15 +112,21 @@ async function buildContext(sb: Awaited<ReturnType<typeof createClient>>) {
   };
 }
 
+/** Het schema garandeert dat het eerste tekstblok geldige JSON is, dus hier
+ *  geen hekjes strippen meer. */
 function parseResponse(value: string) {
-  const clean = value.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(clean) as {
+  return JSON.parse(value) as {
     answer?: unknown;
     intent?: unknown;
     needs_plan_review?: unknown;
     review_reason?: unknown;
     safety_note?: unknown;
   };
+}
+
+/** Leeg veld betekent "niet van toepassing"; dat bewaren we als null. */
+function optionalText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export async function sendCoachMessage(formData: FormData): Promise<SendCoachMessageState> {
@@ -140,29 +178,56 @@ export async function sendCoachMessage(formData: FormData): Promise<SendCoachMes
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 1200,
+      // Sonnet 5 denkt als je `thinking` weglaat, en denktokens tellen mee in
+      // max_tokens. Met de oude 1200 kapte een antwoord daardoor middenin de
+      // JSON af. Expliciet zetten, en ruimte geven.
+      max_tokens: 4000,
+      thinking: { type: "adaptive" },
+      output_config: {
+        effort: "medium",
+        format: { type: "json_schema", schema: ANSWER_SCHEMA },
+      },
       system: systemPrompt(),
       messages: [{
         role: "user",
         content: `RECENT GESPREK\n${transcript || "Nog geen eerder gesprek."}\n\nACTUELE APP-CONTEXT\n${JSON.stringify(context)}\n\nNIEUW BERICHT VAN DE ATLEET\n${content}`,
       }],
     });
+
+    // Afgekapte JSON geeft anders een onleesbare parse-fout, en een weigering
+    // levert helemaal geen tekstblok op. Allebei eerst benoemen.
+    if (response.stop_reason === "max_tokens") {
+      throw new Error("Antwoord afgekapt op max_tokens; JSON onvolledig");
+    }
+    if (response.stop_reason === "refusal") {
+      throw new Error(
+        `Model weigerde te antwoorden (${response.stop_details?.category ?? "onbekend"})`,
+      );
+    }
+
     const text = response.content.find((block) => block.type === "text")?.text;
     if (!text) throw new Error("Coach gaf geen tekst terug");
     const parsed = parseResponse(text);
     const answer = typeof parsed.answer === "string" ? parsed.answer.trim() : "";
     if (!answer) throw new Error("Coachantwoord mist inhoud");
     const needsPlanReview = parsed.needs_plan_review === true;
-    const costUsd = (
-      response.usage.input_tokens * 3 + response.usage.output_tokens * 15
-    ) / 1_000_000;
+    const price = PRICE_PER_MTOK[MODEL] ?? { input: 0, output: 0 };
+    const cachedTokens = response.usage.cache_read_input_tokens ?? 0;
+    const freshTokens =
+      response.usage.input_tokens + (response.usage.cache_creation_input_tokens ?? 0);
+    const costUsd =
+      (freshTokens * price.input +
+        cachedTokens * price.input * 0.1 +
+        response.usage.output_tokens * price.output) /
+      1_000_000;
     const metadata = {
       needs_plan_review: needsPlanReview,
-      review_reason: typeof parsed.review_reason === "string" ? parsed.review_reason.trim() : null,
-      safety_note: typeof parsed.safety_note === "string" ? parsed.safety_note.trim() : null,
+      review_reason: optionalText(parsed.review_reason),
+      safety_note: optionalText(parsed.safety_note),
       model: MODEL,
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
+      cache_read_tokens: cachedTokens,
       cost_usd: Math.round(costUsd * 100_000) / 100_000,
     };
     const { data: assistantMessage, error } = await sb
@@ -184,7 +249,10 @@ export async function sendCoachMessage(formData: FormData): Promise<SendCoachMes
       userMessage: userMessage as CoachMessage,
       assistantMessage: assistantMessage as CoachMessage,
     };
-  } catch {
+  } catch (cause) {
+    // Zonder dit zien een verkeerde API-key, een rate limit en een afgekapt
+    // antwoord er in de app identiek uit.
+    console.error("[coach] antwoord mislukt", cause);
     return {
       ok: false,
       error: "De coach kon nu niet antwoorden. Je bericht is wel bewaard; probeer het zo opnieuw.",

@@ -3,6 +3,7 @@ import { PlanWeekCard } from "@/components/plan-week-card";
 import { PlanApproval } from "@/components/plan-approval";
 import { PlanHistoryCard } from "@/components/plan-history-card";
 import { PlanSessionRow, WeekBlocks } from "@/components/plan-session-row";
+import { NewPlanWizard } from "@/components/new-plan-wizard";
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,9 +13,12 @@ import {
   getActivePlan,
   getAdjustments,
   getGoal,
+  getLatestGoalPlanRequest,
+  getActivities,
   getPlanSessions,
   getPlanHistory,
   getProposedPlan,
+  getWeeks,
   type PlanSession,
 } from "@/lib/queries";
 
@@ -70,16 +74,32 @@ function mondayOf(iso: string): string {
 }
 
 export default async function PlanPage() {
-  const [plan, goal, proposed] = await Promise.all([
+  const [plan, goal, proposed, goalRequest, weeksSummary, recentActivities] = await Promise.all([
     getActivePlan(),
     getGoal(),
     getProposedPlan(),
+    getLatestGoalPlanRequest(),
+    getWeeks(4),
+    getActivities(20),
   ]);
+
+  const currentCapacityM = Number(goal?.params?.current_capacity_m ?? 0) || 5_000;
+  const recentRun = recentActivities.find((activity) => activity.sport === "running" && activity.distance_m && activity.duration_s);
+  const currentWeeklyVolumeM = weeksSummary.at(-1)?.distance_m ?? Number(goal?.params?.current_weekly_volume_m ?? 0) ?? 0;
+  const visibleGoalRequest = goalRequest && ["requested", "running", "error"].includes(goalRequest.status)
+    ? goalRequest
+    : null;
 
   if (!plan) {
     return (
       <main className="space-y-5">
         <ScreenHeader eyebrow="Trainingsblok" title="Plan" />
+        <NewPlanWizard
+          defaultCapacityM={currentCapacityM}
+          defaultWeeklyVolumeM={currentWeeklyVolumeM}
+          defaultBenchmark={recentRun ? { distanceM: recentRun.distance_m!, durationS: recentRun.duration_s! } : null}
+          initialRequest={visibleGoalRequest}
+        />
         <Card className="p-4 text-sm text-muted">Nog geen actief plan.</Card>
       </main>
     );
@@ -123,6 +143,13 @@ export default async function PlanPage() {
         title="Jouw trainingsplan"
         description="Je volledige blok, de reden achter aanpassingen en wat er deze week moet gebeuren."
         action={<Badge variant="teal" className="mt-1">actief</Badge>}
+      />
+
+      <NewPlanWizard
+        defaultCapacityM={currentCapacityM}
+        defaultWeeklyVolumeM={currentWeeklyVolumeM}
+        defaultBenchmark={recentRun ? { distanceM: recentRun.distance_m!, durationS: recentRun.duration_s! } : null}
+        initialRequest={visibleGoalRequest}
       />
 
       <PlanHistoryCard plans={planHistory} />
