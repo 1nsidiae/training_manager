@@ -277,6 +277,39 @@ def _close_request(
     ).eq("id", request["id"]).execute()
 
 
+def _log_scheduled_sync(
+    sb: Client,
+    started: datetime,
+    start: str,
+    end: str,
+    *,
+    items: int = 0,
+    error: str | None = None,
+) -> None:
+    """Leg een geplande sync vast, net als een sync op verzoek.
+
+    Zonder dit is de worker onzichtbaar: hij synct elk half uur, maar `sync_log`
+    kende alleen rijen van een druk op de knop. De app las daardoor een tijdstip
+    van uren geleden terwijl de data allang ververst was — je kon niet zien of
+    de automatische sync draaide of stilstond.
+    """
+    try:
+        sb.table("sync_log").insert(
+            {
+                "sync_type": "scheduled",
+                "status": "error" if error else "ok",
+                "started_at": started.isoformat(),
+                "finished_at": clock.utc_now().isoformat(),
+                "items_synced": items,
+                "window_start": start,
+                "window_end": end,
+                "error": error,
+            }
+        ).execute()
+    except Exception as exc:  # noqa: BLE001 - loggen mag de sync niet vellen
+        log.warning("kon geplande sync niet vastleggen: %s: %s", type(exc).__name__, exc)
+
+
 def tick(
     sb: Client,
     settings: Settings,
@@ -366,6 +399,7 @@ def tick(
         start = (today - timedelta(days=RECENT_DAYS)).isoformat()
         end = today.isoformat()
         sync_start, sync_end = start, end
+        sync_started_at = clock.utc_now()
         try:
             garmin = garmin_client(settings)
             result["synced"] += profile_mod.sync_profile(garmin, sb, settings)
@@ -378,13 +412,23 @@ def tick(
         except Exception as exc:  # noqa: BLE001
             log.error("sync mislukt: %s: %s", type(exc).__name__, exc)
             log.error("Bij een loginfout: draai scripts/garmin_login.py opnieuw.")
-            _close_request(sb, request, today, start, end, error=f"{type(exc).__name__}: {exc}")
+            if request:
+                _close_request(sb, request, today, start, end, error=f"{type(exc).__name__}: {exc}")
+            else:
+                _log_scheduled_sync(
+                    sb, sync_started_at, start, end, error=f"{type(exc).__name__}: {exc}"
+                )
             request = None
         else:
             # Een pre-workout job is pas klaar wanneer ook het planvoorstel er
             # staat. Alle gewone syncjobs kunnen hier meteen worden gesloten.
-            if not plan_review_request:
-                _close_request(sb, request, today, start, end, items=result["synced"])
+            if request:
+                if not plan_review_request:
+                    _close_request(sb, request, today, start, end, items=result["synced"])
+            else:
+                _log_scheduled_sync(
+                    sb, sync_started_at, start, end, items=result["synced"]
+                )
             try:
                 result["workout_calendar"] = workouts_mod.sync_workout_calendar(
                     garmin, sb

@@ -824,7 +824,7 @@ export async function getLastSync() {
   const { data } = await sb
     .from("sync_log")
     .select("sync_type, finished_at, status, items_synced")
-    .in("sync_type", ["manual", "recent", "backfill"])
+    .in("sync_type", ["manual", "recent", "backfill", "scheduled"])
     .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -838,7 +838,7 @@ export async function getLastGarminSync() {
   const { data } = await sb
     .from("sync_log")
     .select("sync_type, finished_at, status, items_synced")
-    .in("sync_type", ["manual", "recent", "backfill"])
+    .in("sync_type", ["manual", "recent", "backfill", "scheduled"])
     .eq("status", "ok")
     .not("finished_at", "is", null)
     .order("finished_at", { ascending: false })
