@@ -32,3 +32,6 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+
+# Database-exports met persoonlijke data
+backups/

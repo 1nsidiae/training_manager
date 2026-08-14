@@ -52,15 +52,21 @@ INTERVAL_MARGIN = 0.92
 def _pace_ceiling(context: dict[str, Any]) -> float | None:
     """Snelste tempo (s/km) dat nog verdedigbaar is, of None bij te weinig data.
 
-    Neemt bewust de *optimistische* van beide vormschattingen als basis: deze
-    regel is een vangnet tegen onzin uit oude vorm, geen fijnregeling.
+    Het anker is de bron: dat is de enige schatting die weet welk bewijs eronder
+    ligt en hoe oud het is. Daarnaast blijft Garmin meedoen, want deze regel is
+    een vangnet tegen onzin uit oude vorm, geen fijnregeling — en dan wil je de
+    *optimistische* grens, zodat hij alleen bij echte onzin afgaat.
+
+    `current` telt hier bewust niet mee: die schat op basis van elke run, ook
+    rustige, en zou het plafond onterecht laag leggen bij een loper die net
+    hersteljogs heeft gedaan.
     """
     fitness = context.get("fitness") or {}
     candidates: list[float] = []
 
-    current = fitness.get("current") or {}
-    if current.get("equiv_5k_s"):
-        candidates.append(float(current["equiv_5k_s"]) / 5.0)
+    anchor = fitness.get("anchor") or {}
+    if anchor.get("equiv_5k_s"):
+        candidates.append(float(anchor["equiv_5k_s"]) / 5.0)
 
     predictions = (fitness.get("garmin_predictions") or {}).get("race_predictions") or {}
     if predictions.get("5k"):

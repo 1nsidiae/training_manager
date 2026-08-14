@@ -389,13 +389,17 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         },
         "constraints": constraints,
         "fitness": {
+            "anchor": estimates.get("anchor"),
             "current": estimates.get("current"),
             "historical": estimates.get("historical"),
             "garmin_predictions": predictions[0] if predictions else None,
             "note": (
-                "current komt uit de eigen runs met sample_size erbij; "
-                "garmin_predictions is VO2max-gebaseerd. Wijken ze af, neem de "
-                "conservatieve en zeg dat. historical is context, geen doel."
+                "anchor is de enige schatting waarop je een tempodoel mag baseren. "
+                "Hij kiest zelf de beste bron en verantwoordt dat in basis: source, "
+                "evidence_date, evidence_age_days en confidence. Bij confidence "
+                "'low' of 'medium' geef je een ruime tempoband en benoem je de "
+                "onzekerheid. current telt elke run mee, ook rustige, en "
+                "onderschat daardoor; historical is context, nooit een doel."
             ),
         },
         "recent_days": daily,

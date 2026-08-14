@@ -19,6 +19,7 @@ from typing import Any
 
 from supabase import Client
 
+from . import anchor
 from . import clock
 
 log = logging.getLogger(__name__)
@@ -369,7 +370,7 @@ def compute_fitness_estimates(sb: Client) -> int:
     activities = _rows(
         sb,
         "activities",
-        "sport, start_time_local, distance_m, duration_s, moving_duration_s, vo2max",
+        "sport, start_time_local, distance_m, duration_s, moving_duration_s, vo2max, avg_hr",
     )
     runs = [a for a in activities if a["sport"] in RUNNING_SPORTS]
 
@@ -390,11 +391,61 @@ def compute_fitness_estimates(sb: Client) -> int:
     if historical:
         rows.append(historical)
 
+    anchor_row = _build_anchor(sb, runs, historical)
+    if anchor_row:
+        rows.append(anchor_row)
+
     if rows:
         sb.table("fitness_estimates").upsert(rows, on_conflict="day,scope").execute()
 
     log.info("fitness_estimates: %d rijen", len(rows))
     return len(rows)
+
+
+def _build_anchor(
+    sb: Client, runs: list[dict[str, Any]], historical: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Het anker waarop tempodoelen rusten.
+
+    Anders dan `current` telt hier alleen mee wat plausibel een prestatie was.
+    Een rustige duurloop zegt niets over je vermogen, en zolang die wel meetelde
+    kwam er een tempodoel uit dat eerder een straf dan een doel was.
+    """
+    profile = sb.table("athlete_profile").select("lactate_threshold_hr").limit(1).execute().data
+    threshold_hr = (profile[0].get("lactate_threshold_hr") if profile else None)
+
+    since = anchor.window_start()
+    efforts = [
+        r
+        for r in runs
+        if str(r["start_time_local"])[:10] >= since and anchor.is_effort(r, threshold_hr)
+    ]
+    own = _estimate(efforts, "anchor", anchor.ANCHOR_WINDOW_DAYS) if efforts else None
+
+    snapshot = (
+        sb.table("fitness_snapshots")
+        .select("day, race_predictions")
+        .not_.is_("race_predictions", "null")
+        .order("day", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    predictions = snapshot[0]["race_predictions"] if snapshot else None
+
+    row = anchor.build(own=own, garmin_predictions=predictions, historical=historical)
+    if row:
+        basis = row["basis"]
+        log.info(
+            "vormanker: bron %s, bewijs %s (%s dagen oud), zekerheid %s",
+            basis["source"],
+            basis["evidence_date"],
+            basis["evidence_age_days"],
+            basis["confidence"],
+        )
+    else:
+        log.warning("vormanker: geen enkele bruikbare bron")
+    return row
 
 
 def compute_all(sb: Client) -> int:
