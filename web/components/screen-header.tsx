@@ -31,11 +31,11 @@ export function ScreenHeader({
           <p className="mt-2 max-w-md text-[13px] leading-relaxed text-muted">{description}</p>
         ) : null}
       </div>
-      {action ?? (
+      {action === undefined ? (
         <Button variant="ghost" size="icon" aria-label="Meer opties" className="-mr-2 text-faint">
           <MoreHorizontal />
         </Button>
-      )}
+      ) : action}
     </header>
   );
 }

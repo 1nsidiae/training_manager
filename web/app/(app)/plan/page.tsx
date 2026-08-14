@@ -1,13 +1,15 @@
 import { CoachRuleRow } from "@/components/coach-rule-row";
+import { AppTopBar } from "@/components/app-top-bar";
 import { PlanWeekCard } from "@/components/plan-week-card";
 import { PlanApproval } from "@/components/plan-approval";
+import { PlanBlockProgress } from "@/components/plan-block-progress";
+import { PlanCalendarPanel } from "@/components/plan-calendar-panel";
 import { PlanHistoryCard } from "@/components/plan-history-card";
 import { PlanSessionRow, WeekBlocks } from "@/components/plan-session-row";
 import { NewPlanWizard } from "@/components/new-plan-wizard";
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { comparePlans } from "@/lib/plan-comparison";
 import {
   getActivePlan,
@@ -93,7 +95,8 @@ export default async function PlanPage() {
   if (!plan) {
     return (
       <main className="space-y-5">
-        <ScreenHeader eyebrow="Trainingsblok" title="Plan" />
+        <AppTopBar title="Plan" />
+        <ScreenHeader eyebrow="Trainingsblok" title="Nieuw trainingsplan" action={null} />
         <NewPlanWizard
           defaultCapacityM={currentCapacityM}
           defaultWeeklyVolumeM={currentWeeklyVolumeM}
@@ -124,10 +127,12 @@ export default async function PlanPage() {
   const currentIndex = Math.max(weekList.findIndex(([w]) => w === thisWeek), 0);
 
   const planLevel = adjustments.filter((a) => a.plan_session_id == null);
-  const lastWeekStart = weekList.at(-1)?.[0];
 
   return (
     <main className="space-y-5">
+      <AppTopBar title="Plan" />
+      <PlanCalendarPanel weeks={weekList} currentIndex={currentIndex} />
+
       {proposed ? (
         <PlanApproval
           plan={proposed}
@@ -166,20 +171,7 @@ export default async function PlanPage() {
           <h2 className="mt-2 text-[17px]">{goal.name}</h2>
           <p className="mt-1.5 text-xs leading-[1.5] text-muted">{plan.summary}</p>
 
-          <Progress
-            value={((currentIndex + 1) / Math.max(weekList.length, 1)) * 100}
-            indicatorClassName="bg-strain"
-            className="mt-3.5"
-          />
-          <div className="mt-2 flex justify-between">
-            <span className="numeral text-[10px] font-medium text-ink">
-              Week {currentIndex + 1}
-            </span>
-            <span className="numeral text-[10px] font-medium text-faint">
-              Week {weekList.length}
-              {lastWeekStart ? ` · ${lastWeekStart.slice(8)}-${lastWeekStart.slice(5, 7)}` : ""}
-            </span>
-          </div>
+          <PlanBlockProgress weeks={weekList} currentIndex={currentIndex} />
         </Card>
       )}
 

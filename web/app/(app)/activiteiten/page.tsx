@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ActivityPagination } from "@/components/activity-pagination";
 import { ActivityDrawer } from "@/components/activity-drawer";
+import { AppTopBar } from "@/components/app-top-bar";
 import { HistoryTabs } from "@/components/history-tabs";
 import { InteractiveBarChart, type InteractiveBarDatum } from "@/components/interactive-bar-chart";
 import { ScreenHeader } from "@/components/screen-header";
@@ -239,14 +240,16 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
 
   return (
     <main className="space-y-5">
+      <AppTopBar title="Activiteiten" />
       <ScreenHeader
         eyebrow="Garmin Connect"
-        title="Activiteiten"
+        title="Trainingshistorie"
         description={
           firstMonth
             ? `${archive.total} activiteiten sinds ${firstMonth}. Elke sport blijft zichtbaar en telt mee als trainingscontext.`
             : "Al je Garmin-activiteiten, ongeacht de sport."
         }
+        action={null}
       />
 
       <ViewSwitch current="archive" sport={sport} />
@@ -400,10 +403,12 @@ async function TrendsView({ sport }: { sport: string }) {
 
   return (
     <main className="space-y-5">
+      <AppTopBar title="Activiteiten" />
       <ScreenHeader
         eyebrow="Historie"
-        title="Trends"
+        title="Prestatie-overzicht"
         description="Zie hoe je hardloopvolume en herstel over tijd evolueren. Andere sporten tellen mee in je totale belasting."
+        action={null}
       />
       <ViewSwitch current="trends" sport={sport} />
       <HistoryTabs

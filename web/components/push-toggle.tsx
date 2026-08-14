@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import { Bell, BellOff, LoaderCircle, Smartphone, TriangleAlert } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
+import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -16,8 +15,9 @@ type State =
   | "geen_pwa"
   | "geweigerd"
   | "uit"
-  | "aan"
-  | "bezig";
+  | "aan";
+
+type PendingAction = "aanzetten" | "uitzetten" | null;
 
 /** VAPID-sleutels zijn base64url; PushManager wil ruwe bytes. Teruggeven als
  * ArrayBuffer en niet als Uint8Array: die laatste kan volgens de types ook op
@@ -56,6 +56,7 @@ function iosZonderInstallatie(): boolean {
 
 export function PushToggle() {
   const [state, setState] = React.useState<State>("laden");
+  const [pendingAction, setPendingAction] = React.useState<PendingAction>(null);
 
   React.useEffect(() => {
     async function bepaalStand() {
@@ -84,7 +85,7 @@ export function PushToggle() {
   }, []);
 
   async function aanzetten() {
-    setState("bezig");
+    setPendingAction("aanzetten");
     try {
       if (!VAPID_PUBLIC_KEY) {
         throw new Error("NEXT_PUBLIC_VAPID_PUBLIC_KEY ontbreekt in de webomgeving.");
@@ -92,6 +93,11 @@ export function PushToggle() {
       const toestemming = await Notification.requestPermission();
       if (toestemming !== "granted") {
         setState(toestemming === "denied" ? "geweigerd" : "uit");
+        toast.warning("Meldingen niet toegestaan", {
+          description: toestemming === "denied"
+            ? "Sta meldingen toe in de instellingen van je browser of telefoon."
+            : "Je kunt dit later opnieuw proberen.",
+        });
         return;
       }
 
@@ -132,11 +138,13 @@ export function PushToggle() {
         description: exc instanceof Error ? exc.message : "Probeer het opnieuw.",
         duration: 6500,
       });
+    } finally {
+      setPendingAction(null);
     }
   }
 
   async function uitzetten() {
-    setState("bezig");
+    setPendingAction("uitzetten");
     try {
       const registration = await navigator.serviceWorker.ready;
       const abonnement = await registration.pushManager.getSubscription();
@@ -157,21 +165,9 @@ export function PushToggle() {
         description: exc instanceof Error ? exc.message : "Probeer het opnieuw.",
         duration: 6500,
       });
+    } finally {
+      setPendingAction(null);
     }
-  }
-
-  async function testen() {
-    const { error } = await createClient().rpc("send_test_notification");
-    if (error) {
-      toast.error("Testmelding niet verstuurd", {
-        description: error.message,
-        duration: 6500,
-      });
-      return;
-    }
-    toast.success("Testmelding verstuurd", {
-      description: "Ze komt normaal binnen enkele seconden aan.",
-    });
   }
 
   const uitleg: Record<State, string> = {
@@ -182,21 +178,22 @@ export function PushToggle() {
     geweigerd:
       "Meldingen staan geblokkeerd voor deze site. Zet ze weer aan in de instellingen van je browser of telefoon.",
     uit: "Je krijgt bericht bij een nieuw schema, een bijstelling en wat je verder moet weten.",
-    aan: "Dit toestel staat geregistreerd.",
-    bezig: "Bezig…",
+    aan: "Ontvang trainings-, schema- en coachupdates op dit toestel.",
   };
 
-  const badge =
+  const status =
     state === "aan"
-      ? { label: "aan", variant: "teal" as const }
+      ? { label: "Actief op dit toestel", tone: "text-teal" }
       : state === "geweigerd" || state === "niet_ondersteund"
-        ? { label: "niet mogelijk", variant: "warning" as const }
+        ? { label: "Niet beschikbaar", tone: "text-warning" }
         : state === "geen_pwa"
-          ? { label: "installeer eerst", variant: "warning" as const }
-          : { label: "uit", variant: "recovery" as const };
+          ? { label: "Installatie nodig", tone: "text-warning" }
+          : state === "laden"
+            ? { label: "Status controleren", tone: "text-faint" }
+            : { label: "Uit op dit toestel", tone: "text-faint" };
 
   const icoon =
-    state === "bezig" || state === "laden" ? (
+    state === "laden" || pendingAction !== null ? (
       <LoaderCircle className="size-[18px] animate-spin" />
     ) : state === "aan" ? (
       <Bell className="size-[18px]" />
@@ -215,39 +212,33 @@ export function PushToggle() {
         ? "bg-warning/10 text-warning"
         : "bg-recovery/10 text-recovery";
 
+  const kanWijzigen = state === "aan" || state === "uit";
+
+  function wijzigStand(checked: boolean) {
+    if (!kanWijzigen || pendingAction !== null) return;
+    if (checked) void aanzetten();
+    else void uitzetten();
+  }
+
   return (
-    <Card className="p-3.5">
+    <Card className="p-4">
       <div className="flex items-center gap-3">
         <div className={`grid size-10 shrink-0 place-items-center rounded-full ${toon}`}>
           {icoon}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium">Push-meldingen</div>
-          <div className="mt-px text-[11px] text-faint">dit toestel</div>
+          <div className="text-[13px] font-semibold text-ink">Pushmeldingen</div>
+          <div className={`mt-px text-[10px] font-medium ${status.tone}`}>{status.label}</div>
         </div>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+        <Switch
+          checked={state === "aan"}
+          onCheckedChange={wijzigStand}
+          disabled={!kanWijzigen || pendingAction !== null}
+          aria-label={state === "aan" ? "Pushmeldingen uitzetten" : "Pushmeldingen aanzetten"}
+        />
       </div>
 
-      <p className="mt-3 text-xs leading-relaxed text-muted">{uitleg[state]}</p>
-
-      {(state === "uit" || state === "aan" || state === "bezig") && (
-        <div className="mt-3 flex gap-2">
-          {state === "aan" ? (
-            <>
-              <Button variant="secondary" onClick={uitzetten} className="flex-1">
-                Uitzetten
-              </Button>
-              <Button variant="secondary" onClick={testen} className="flex-1">
-                Testmelding
-              </Button>
-            </>
-          ) : (
-            <Button onClick={aanzetten} disabled={state === "bezig"} className="flex-1">
-              Meldingen aanzetten
-            </Button>
-          )}
-        </div>
-      )}
+      <p className="mt-3 text-[11px] leading-relaxed text-muted">{uitleg[state]}</p>
     </Card>
   );
 }

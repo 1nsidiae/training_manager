@@ -27,6 +27,20 @@ const SPORT_LABEL: Record<string, string> = {
   other: "Andere sport",
 };
 
+const RULE_LABEL: Record<string, string> = {
+  return_to_run_phase: "Terugkeer na trainingspauze",
+  sleep_7d_below_threshold: "Slaap remt de weekgroei",
+  weekly_volume_ramp_cap: "Maximaal 10% weekgroei",
+  pain_threshold_override: "Pijn gaat voor op het trainingsdoel",
+  acwr_band: "Belasting blijft binnen de veilige band",
+  quality_spacing: "Herstel tussen kwaliteitssessies",
+  readiness_quality_gate: "Trainingsfitheid stuurt intensiteit",
+};
+
+function ruleLabel(rule: string) {
+  return RULE_LABEL[rule] ?? "Coachregel toegepast";
+}
+
 function loadLabel(value: number | null) {
   if (value == null) return "geen loadmeting";
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1).replace(".", ",")} load`;
@@ -147,11 +161,11 @@ export function PlanImpactCard({
             <div className="space-y-2">
               {importantAdjustments.map((adjustment) => (
                 <div key={adjustment.id} className="border-b border-line px-0.5 pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={adjustment.severity === "override" ? "danger" : "warning"}>
-                      {adjustment.severity === "override" ? "veiligheid" : "begrenzing"}
-                    </Badge>
-                    <span className="truncate text-[9px] font-semibold text-faint">{adjustment.rule}</span>
+                  <div className="flex items-baseline gap-2.5">
+                    <span className={`text-[9px] font-bold uppercase tracking-[0.09em] ${adjustment.severity === "override" ? "text-danger" : "text-warning"}`}>
+                      {adjustment.severity === "override" ? "Veiligheid" : "Begrenzing"}
+                    </span>
+                    <span className="min-w-0 text-[10px] font-semibold text-muted">{ruleLabel(adjustment.rule)}</span>
                   </div>
                   <p className="mt-2 text-[11px] leading-relaxed text-muted">{adjustment.explanation.nl}</p>
                 </div>

@@ -1,5 +1,6 @@
 import { CoachRuleRow } from "@/components/coach-rule-row";
 import { CoachChat } from "@/components/coach-chat";
+import { AppTopBar } from "@/components/app-top-bar";
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -111,9 +112,10 @@ export default async function CoachPage() {
 
   return (
     <main className="space-y-5">
+      <AppTopBar title="Coach" />
       <ScreenHeader
         eyebrow="Persoonlijke begeleiding"
-        title="Coach"
+        title="Vraag je coach"
         description="Vraag iets over je schema of vertel hoe je je voelt. De coach antwoordt met je actuele Garmin- en plangegevens."
         action={<Badge variant="recovery" className="mt-1">Garmin-context</Badge>}
       />

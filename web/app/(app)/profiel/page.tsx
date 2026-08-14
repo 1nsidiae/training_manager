@@ -1,7 +1,7 @@
 import { Watch } from "lucide-react";
+import { AppTopBar } from "@/components/app-top-bar";
 import { PushToggle } from "@/components/push-toggle";
 import { ScreenHeader } from "@/components/screen-header";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getAthlete, getFitness, getLastSync, getLatestVo2Max } from "@/lib/queries";
@@ -45,61 +45,76 @@ export default async function ProfilePage() {
   const current = fitness.find((f) => f.scope === "current");
   const historical = fitness.find((f) => f.scope === "historical");
   const zones = (athlete?.hr_zones ?? []) as { zone: number; low: number; high: number }[];
+  const easyCap = zones.find((zone) => zone.zone === 2)?.high;
+  const zoneFourCap = zones.find((zone) => zone.zone === 4)?.high;
+  const zoneSource = athlete?.hr_zones_source === "activity"
+    ? "Garmin · activiteiten"
+    : athlete?.hr_zones_source
+      ? `Garmin · ${athlete.hr_zones_source}`
+      : "Garmin";
 
   return (
     <main className="space-y-5">
-      <div className="flex items-center gap-3.5">
-        <Avatar className="size-14">
-          <AvatarFallback className="text-[15px]">
-            {(athlete?.display_name ?? "?")
-              .split(" ")
-              .map((p: string) => p[0])
-              .slice(0, 2)
-              .join("")}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <ScreenHeader eyebrow="Atleetprofiel" title={athlete?.display_name ?? "Onbekend"} action={<Badge variant="teal" className="mt-1">Garmin</Badge>} />
-        </div>
-      </div>
+      <AppTopBar title="Profiel" />
+      <ScreenHeader eyebrow="Atleetprofiel" title={athlete?.display_name ?? "Onbekend"} action={<Badge variant="teal" className="mt-1">Garmin</Badge>} />
 
       {/* Hartslagzones: de basis onder elke sessie in dit plan. */}
       <Card className="p-4">
-        <div className="mb-3 flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between gap-3">
           <span className="label">Hartslagzones</span>
-          <span className="text-[11px] font-medium text-faint">
-            bron: {athlete?.hr_zones_source ?? "—"}
-          </span>
+          <span className="text-[10px] font-medium text-faint">{zoneSource}</span>
         </div>
 
-        <div className="mb-3 flex gap-4">
+        <div className="mt-3 grid grid-cols-3 divide-x divide-line overflow-hidden rounded-row bg-s2">
           <Stat label="Max-HR" value={athlete?.max_hr ?? "–"} unit="bpm" />
           <Stat label="Rust-HR" value={athlete?.resting_hr ?? "–"} unit="bpm" />
           <Stat label="Drempel" value={athlete?.lactate_threshold_hr ?? "–"} unit="bpm" />
         </div>
 
-        <div className="space-y-1">
-          {zones.map((z) => (
-            <div key={z.zone} className="flex items-center gap-2.5">
-              <span className="w-10 shrink-0 text-[11px] font-medium text-faint">
-                Zone {z.zone}
-              </span>
-              <div
-                className="h-1.5 flex-1 rounded-full"
-                style={{ background: ZONE_COLORS[z.zone - 1] }}
-              />
-              <span className="numeral w-[70px] shrink-0 text-right text-[11px] text-muted">
-                {z.low}–{z.high}
-              </span>
+        {zones.length ? (
+          <>
+            <div className="mt-4 grid h-2 grid-cols-5 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
+              {zones.map((zone) => (
+                <span key={zone.zone} style={{ background: ZONE_COLORS[zone.zone - 1] }} />
+              ))}
             </div>
-          ))}
-        </div>
 
-        <p className="mt-3 text-xs leading-relaxed text-muted">
-          Rustig lopen betekent voor jou onder {zones.find((z) => z.zone === 2)?.high ?? "–"}{" "}
-          bpm. Je zone 4 loopt tot {zones.find((z) => z.zone === 4)?.high ?? "–"} en ligt
-          daarmee onder je drempel van {athlete?.lactate_threshold_hr ?? "–"}.
-        </p>
+            <div className="mt-2 divide-y divide-line">
+              {zones.map((zone) => (
+                <div key={zone.zone} className="flex items-center gap-2.5 py-2">
+                  <span
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ background: ZONE_COLORS[zone.zone - 1] }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1 text-[11px] font-medium text-muted">Zone {zone.zone}</span>
+                  <span className="numeral text-[11px] font-semibold text-ink">
+                    {zone.low}–{zone.high} <span className="font-normal text-faint">bpm</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-2 flex items-end justify-between gap-4 border-t border-line pt-3">
+              <div>
+                <div className="label text-[9px]">Rustige bovengrens</div>
+                <div className="mt-1 text-[10px] text-faint">Bovenkant van zone 2</div>
+              </div>
+              <div className="numeral text-xl font-bold text-recovery">
+                ≤ {easyCap ?? "–"}<span className="ml-1 text-[10px] font-medium text-faint">bpm</span>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[10px] leading-relaxed text-muted">
+              Zone 4 eindigt op {zoneFourCap ?? "–"} bpm en blijft onder je drempel van{" "}
+              {athlete?.lactate_threshold_hr ?? "–"} bpm.
+            </p>
+          </>
+        ) : (
+          <p className="mt-3 text-[11px] leading-relaxed text-muted">
+            Garmin heeft nog geen hartslagzones gesynchroniseerd.
+          </p>
+        )}
       </Card>
 
       {/* Vorm */}
@@ -178,7 +193,7 @@ function Stat({
   unit?: string;
 }) {
   return (
-    <div>
+    <div className="px-3 py-3">
       <div className="text-[10px] font-medium text-faint">{label}</div>
       <div className="numeral mt-1 text-lg font-bold">
         {value}

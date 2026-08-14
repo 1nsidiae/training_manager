@@ -60,14 +60,14 @@ export function TodayHeader({
   }
 
   return (
-    <header className="grid min-h-12 grid-cols-[36px_minmax(0,1fr)_52px] items-center gap-2">
+    <header className="grid min-h-11 grid-cols-[40px_minmax(0,1fr)_52px] items-center gap-3">
       <Link
         href="/profiel"
         aria-label="Open je profiel"
         className="focus-ring rounded-full"
       >
-        <Avatar className="size-9 border-line bg-transparent">
-          <AvatarFallback>{initials}</AvatarFallback>
+        <Avatar className="size-10 border-line bg-transparent">
+          <AvatarFallback className="text-[11px] font-semibold">{initials}</AvatarFallback>
         </Avatar>
       </Link>
 
@@ -132,7 +132,9 @@ export function TodayHeader({
         )}
       </div>
 
-      <SyncButton lastSyncAt={lastSyncAt} />
+      <div className="grid h-10 w-[52px] place-items-center justify-self-end">
+        <SyncButton lastSyncAt={lastSyncAt} />
+      </div>
     </header>
   );
 }

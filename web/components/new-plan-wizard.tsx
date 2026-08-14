@@ -388,7 +388,7 @@ export function NewPlanWizard({
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
-        <button type="button" className="card-insight flex w-full items-center gap-3 p-4 text-left active:bg-s2">
+        <button type="button" className="card surface-pressable flex w-full items-center gap-3 p-4 text-left">
           <span className="grid size-11 shrink-0 place-items-center rounded-full bg-recovery/10 text-recovery">
             <Plus className="size-5" />
           </span>
