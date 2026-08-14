@@ -10,7 +10,13 @@ name: training-manager
 services:
   web:
     build:
-      context: ./web
+      # De repo-root, niet ./web. `web/lib/training-load.ts` importeert
+      # `../../tm_sync/training_load_model.json` — één model, gedeeld met de
+      # Python-kant. Met ./web als context bestaat dat pad niet in de container
+      # en faalt de build, terwijl hij op je laptop wel lukt. Wat de web-build
+      # níét mag zien staat in web/Dockerfile.dockerignore.
+      context: .
+      dockerfile: web/Dockerfile
       args:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}

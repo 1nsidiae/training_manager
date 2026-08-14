@@ -1,0 +1,38 @@
+# Geldt voor de web-build, die de repo-root als context heeft. BuildKit kiest
+# dit bestand boven de root-.dockerignore omdat het naast de Dockerfile staat
+# waarnaar `dockerfile:` verwijst.
+#
+# Van de Python-kant komt bewust één bestand mee — tm_sync/training_load_model.json,
+# het model dat web en worker delen. Alle .py-bestanden blijven buiten dit image.
+
+.git
+.github
+.claude
+.venv
+.pnpm-store
+tm_sync/*.py
+tm_sync/__pycache__
+tm_coach
+tm_worker
+tests
+docs
+scripts
+backups
+supabase
+secrets
+caddy_data
+caddy_config
+Dockerfile.worker
+compose.yaml
+Caddyfile
+pyproject.toml
+uv.lock
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/.next
+**/tsconfig.tsbuildinfo
+.env
+.env.*
+!.env.example
+!.env.production.example
