@@ -24,8 +24,14 @@ services:
       # De coachchat draait als server action in deze container.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      # Op loopback, niet op 0.0.0.0: de app hoort niet rechtstreeks aan het
+      # internet te hangen. De reverse proxy op de host termineert TLS en
+      # stuurt hierheen. Zonder deze regel had de container alleen `expose` en
+      # was hij vanaf de host onbereikbaar — dan blijft een oude instantie
+      # ongemerkt al het verkeer afhandelen terwijl je denkt te hebben
+      # gedeployed.
+      - "127.0.0.1:${WEB_HOST_PORT:-3002}:3000"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:3000/login"]
       interval: 30s
@@ -67,7 +73,13 @@ services:
     networks:
       - app
 
+  # Caddy start alleen met `--profile caddy`. Op een server die al een reverse
+  # proxy heeft, kan hij 80 en 443 niet krijgen en zou hij bij elke `up` blijven
+  # herstarten. Draai je op een kale VPS zonder nginx, dan is dit wél de weg:
+  #   docker compose --env-file .env.production --profile caddy up -d
   caddy:
+    profiles:
+      - caddy
     image: caddy:2-alpine
     environment:
       DOMAIN: ${DOMAIN}
