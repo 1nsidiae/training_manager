@@ -201,8 +201,23 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
     if last_run:
         days_since_run = (today - date.fromisoformat(str(last_run[0]["start_time_local"])[:10])).days
 
-    first_monday = today - timedelta(days=today.weekday())
-    first_week_is_partial = today > first_monday
+    params = goal.get("params") or {}
+
+    def requested_date(key: str, fallback: date) -> date:
+        try:
+            value = date.fromisoformat(str(params.get(key) or ""))
+        except ValueError:
+            return fallback
+        return max(value, fallback)
+
+    plan_start = requested_date("plan_start_date", today)
+    first_training_date = (
+        requested_date("first_training_date", plan_start)
+        if params.get("first_training_date")
+        else None
+    )
+    first_monday = plan_start - timedelta(days=plan_start.weekday())
+    first_week_is_partial = plan_start > first_monday
 
     active_plan_rows = (
         sb.table("plans")
@@ -254,7 +269,6 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
     # Zelfgerapporteerde capaciteit: wat de atleet nu pijnvrij aankan. Dit is
     # actuele informatie die nergens in de Garmin-data zit — één losse run van
     # vorige maand zegt niets over wat hij vandaag kan.
-    params = goal.get("params") or {}
     capacity_m = float(params.get("current_capacity_m") or 0)
     sessions_pw = float(params.get("sessions_per_week") or 3)
 
@@ -296,9 +310,11 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         "reference_week_distance_m": round(ref_distance),
         "stated_capacity_m": round(capacity_m) or None,
         "sessions_per_week": sessions_pw,
+        "plan_start_date": plan_start.isoformat(),
+        "first_training_date": first_training_date.isoformat() if first_training_date else None,
         "entry_week_ceiling_m": round(entry_ceiling),
         "first_week_is_partial": first_week_is_partial,
-        "first_week_days_remaining": 7 - today.weekday(),
+        "first_week_days_remaining": 7 - plan_start.weekday(),
         "max_weekly_increase_pct": ramp_pct,
         "easy_hr_cap": zone2_high,
         "sleep_7d_avg_h": sleep_7d_avg_h,
@@ -344,6 +360,8 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         "today": today.isoformat(),
         "plan_window": {
             "first_week_start": first_monday.isoformat(),
+            "plan_start_date": plan_start.isoformat(),
+            "first_training_date": first_training_date.isoformat() if first_training_date else None,
             "weeks": weeks_to_plan,
         },
         "athlete": {

@@ -26,6 +26,9 @@ binnen de gemeten context en de guardrails.
 
 Als `goal.params.created_via` gelijk is aan `plan_wizard`, bevat `goal.params` \
 expliciete antwoorden van de atleet. Behandel die als harde praktische input: \
+`plan_window.plan_start_date` is de eerste dag van het nieuwe blok en geen enkele \
+sessie mag ervoor vallen. De eerste niet-rustsessie moet exact op \
+`plan_window.first_training_date` staan. \
 `preferred_training_days` zijn de dagen waarop een sessie mag staan, plan exact \
 `sessions_per_week` trainingssessies per volledige week, plaats de lange duurloop \
 bij voorkeur op `preferred_long_run_day`, en blijf binnen \

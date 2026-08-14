@@ -79,6 +79,55 @@ def validate(
     problems: list[Violation] = []
     sessions = sorted(_sessions(plan), key=lambda s: s["date"])
 
+    # --- Door de atleet gekozen planstart en eerste trainingsdag -----------
+    plan_window = context.get("plan_window") or {}
+    plan_start_value = plan_window.get("plan_start_date")
+    first_training_value = plan_window.get("first_training_date")
+    goal_params = ((context.get("goal") or {}).get("params") or {})
+    is_plan_wizard = goal_params.get("created_via") == "plan_wizard"
+    if is_plan_wizard and plan_start_value:
+        before_start = [s for s in sessions if s["date"] < plan_start_value]
+        for session in before_start:
+            problems.append(
+                Violation(
+                    "plan_start_date",
+                    f"Sessie op {session['date']} valt vóór de gekozen planstart "
+                    f"van {plan_start_value}.",
+                    session["date"],
+                )
+            )
+
+    training_sessions = [s for s in sessions if s.get("session_type") != "rest"]
+    if is_plan_wizard and first_training_value and (
+        not training_sessions or training_sessions[0]["date"] != first_training_value
+    ):
+        actual = training_sessions[0]["date"] if training_sessions else "geen sessie"
+        problems.append(
+            Violation(
+                "first_training_date",
+                f"De gekozen eerste trainingsdag is {first_training_value}, maar de "
+                f"eerste echte sessie staat op {actual}.",
+                first_training_value,
+            )
+        )
+
+    preferred_days = set(goal_params.get("preferred_training_days") or [])
+    weekday_names = [
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+    ]
+    if is_plan_wizard and preferred_days:
+        for session in training_sessions:
+            weekday = weekday_names[date.fromisoformat(session["date"]).weekday()]
+            if weekday not in preferred_days:
+                problems.append(
+                    Violation(
+                        "preferred_training_days",
+                        f"Sessie op {session['date']} staat op {weekday}, maar die dag "
+                        "is niet als beschikbare trainingsdag gekozen.",
+                        session["date"],
+                    )
+                )
+
     # --- HR-bovengrens verplicht op rustige sessies -------------------------
     zones = context["athlete"].get("hr_zones") or []
     zone2_high = next((z["high"] for z in zones if z.get("zone") == 2), None)

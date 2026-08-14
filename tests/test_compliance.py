@@ -378,6 +378,80 @@ class ComplianceGuardrailTest(unittest.TestCase):
         self.assertTrue(any("reductieplafond" in problem.message for problem in repeated))
         self.assertTrue(any("geen long" in problem.message for problem in repeated))
 
+    def test_plan_wizard_enforces_start_and_first_training_date(self) -> None:
+        plan = {
+            "weeks": [{
+                "week_start": "2026-08-17",
+                "planned_distance_m": 5000,
+                "sessions": [{
+                    "date": "2026-08-19",
+                    "session_type": "easy",
+                    "planned_distance_m": 5000,
+                    "hr_cap": 141,
+                    "steps": [],
+                }],
+            }]
+        }
+        context = self._sleep_context()
+        context["recent_wellness"] = []
+        context["plan_window"] = {
+            "plan_start_date": "2026-08-17",
+            "first_training_date": "2026-08-18",
+        }
+        context["goal"] = {
+            "type": "maintenance",
+            "params": {
+                "created_via": "plan_wizard",
+                "preferred_training_days": ["tuesday", "wednesday"],
+            },
+        }
+
+        problems = guardrails.validate(plan, context, [])
+
+        first_day = [problem for problem in problems if problem.rule == "first_training_date"]
+        self.assertEqual(len(first_day), 1)
+        self.assertIn("2026-08-18", first_day[0].message)
+
+    def test_plan_wizard_allows_two_sessions_on_same_selected_day(self) -> None:
+        plan = {
+            "weeks": [{
+                "week_start": "2026-08-17",
+                "planned_distance_m": 5000,
+                "sessions": [{
+                    "date": "2026-08-18",
+                    "session_type": "easy",
+                    "planned_distance_m": 5000,
+                    "hr_cap": 141,
+                    "steps": [],
+                }, {
+                    "date": "2026-08-18",
+                    "session_type": "strength",
+                    "planned_distance_m": 0,
+                    "hr_cap": 0,
+                    "steps": [],
+                }],
+            }]
+        }
+        context = self._sleep_context()
+        context["recent_wellness"] = []
+        context["plan_window"] = {
+            "plan_start_date": "2026-08-17",
+            "first_training_date": "2026-08-18",
+        }
+        context["goal"] = {
+            "type": "maintenance",
+            "params": {
+                "created_via": "plan_wizard",
+                "preferred_training_days": ["tuesday"],
+            },
+        }
+
+        problems = guardrails.validate(plan, context, [])
+
+        self.assertFalse(any(problem.rule in {
+            "plan_start_date", "first_training_date", "preferred_training_days"
+        } for problem in problems))
+
 
 if __name__ == "__main__":
     unittest.main()
