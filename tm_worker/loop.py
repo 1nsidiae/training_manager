@@ -24,6 +24,7 @@ from tm_sync.clients import garmin_client, supabase_client
 from tm_sync.config import Settings, load_settings
 
 from . import adjust as adjust_mod
+from . import reminders as reminders_mod
 from . import triggers as triggers_mod
 
 log = logging.getLogger(__name__)
@@ -322,6 +323,7 @@ def tick(
     result: dict[str, Any] = {
         "synced": 0,
         "adjustments": [],
+        "notified": [],
         "triggers": [],
         "plan": None,
     }
@@ -466,6 +468,19 @@ def tick(
             ]
         except Exception as exc:  # noqa: BLE001 - bijstellen mag de tick niet vellen
             log.error("bijstellen mislukt: %s: %s", type(exc).__name__, exc)
+
+    # Meldingen die uit de toestand volgen. Alles is idempotent op dedupe_key,
+    # dus dit elke tick draaien levert hoogstens één melding per gebeurtenis op.
+    try:
+        result["notified"] = reminders_mod.run_all(
+            sb,
+            plan_rows[0]["id"] if plan_rows else None,
+            today,
+            clock.now().hour,
+            token=result.get("token_warning"),
+        )
+    except Exception as exc:  # noqa: BLE001 - melden mag de tick niet vellen
+        log.error("meldingen mislukt: %s: %s", type(exc).__name__, exc)
 
     found = triggers_mod.detect(sb, today)
     if preworkout_request and request:

@@ -11,7 +11,7 @@ from typing import Any
 import anthropic
 from supabase import Client
 
-from tm_sync import clock
+from tm_sync import clock, notify
 from tm_sync.config import Settings
 
 from . import guardrails
@@ -492,6 +492,33 @@ def _persist(
         log.info(
             "wacht op akkoord vanwege nieuwe zware ingreep: %s",
             ", ".join(sorted(_override_rules(plan.get("adjustments", [])))) or "onbekend",
+        )
+
+    # Een voorstel dat niemand ziet, is geen voorstel. De sleutel bevat het
+    # plan-id, zodat een herstart van de worker niet nog eens hetzelfde meldt.
+    weeks = len(plan.get("weeks", []))
+    if status == "proposed":
+        notify.send(
+            sb,
+            kind="plan_ready",
+            title="Nieuw planvoorstel",
+            body=(
+                f"{plan['phase']} — {weeks} weken, {len(sessions)} sessies. "
+                "Beoordeel het voorstel in de app."
+            ),
+            url=f"/plan/{plan_row['id']}",
+            dedupe_key=f"plan_ready:{plan_row['id']}",
+            data={"plan_id": plan_row["id"], "status": status},
+        )
+    else:
+        notify.send(
+            sb,
+            kind="plan_ready",
+            title="Je nieuwe schema staat klaar",
+            body=f"{plan['phase']} — {weeks} weken, {len(sessions)} sessies.",
+            url="/plan",
+            dedupe_key=f"plan_ready:{plan_row['id']}",
+            data={"plan_id": plan_row["id"], "status": status},
         )
 
     return {

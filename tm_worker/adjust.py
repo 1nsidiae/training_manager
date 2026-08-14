@@ -25,6 +25,8 @@ from typing import Any
 
 from supabase import Client
 
+from tm_sync import notify
+
 log = logging.getLogger(__name__)
 
 QUALITY_TYPES = {"tempo", "interval", "race"}
@@ -403,5 +405,21 @@ def apply(
             change.from_type,
             change.to_type,
             change.rule,
+        )
+        # Dit is precies de categorie "dingen die je moet weten": het schema is
+        # buiten je om veranderd en je horloge krijgt iets anders dan gisteren.
+        notify.send(
+            sb,
+            kind="plan_adjusted",
+            title="Je schema is bijgesteld",
+            body=f"{change.day}: {change.from_type} werd rustig. {change.explanation_nl}",
+            url="/plan",
+            dedupe_key=f"adjust:{change.rule}:{change.session_id}",
+            data={
+                "session_id": change.session_id,
+                "rule": change.rule,
+                "from": change.from_type,
+                "to": change.to_type,
+            },
         )
     return changes

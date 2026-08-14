@@ -1,4 +1,5 @@
 import { Watch } from "lucide-react";
+import { PushToggle } from "@/components/push-toggle";
 import { ScreenHeader } from "@/components/screen-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -161,6 +162,8 @@ export default async function ProfilePage() {
         </div>
         <Badge variant={SYNC_STATE[syncState].variant}>{SYNC_STATE[syncState].badge}</Badge>
       </Card>
+
+      <PushToggle />
     </main>
   );
 }

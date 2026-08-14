@@ -45,3 +45,50 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
 });
+
+// --- meldingen -------------------------------------------------------------
+// De lading komt uit de Edge Function send-push. Wat er ook misgaat, er moet
+// altijd íéts getoond worden: een push-event dat geen notificatie oplevert,
+// laat sommige browsers "deze site draait op de achtergrond" tonen, en dat is
+// verwarrender dan een lege melding.
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+
+  const title = payload.title || "Training Manager";
+  const options = {
+    body: payload.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    // Meldingen van dezelfde soort vervangen elkaar in plaats van te stapelen:
+    // drie keer "je schema is bijgesteld" is één bericht, geen drie.
+    tag: payload.kind || "training-manager",
+    renotify: true,
+    data: { url: payload.url || "/", kind: payload.kind || null, ...(payload.data || {}) },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      // Bestaat het venster al, dan navigeren we daarin. Anders krijg je bij
+      // elke melding een nieuwe kopie van de app erbij.
+      for (const client of clients) {
+        if (client.url === target && "focus" in client) return client.focus();
+      }
+      for (const client of clients) {
+        if ("navigate" in client) return client.navigate(target).then((c) => c && c.focus());
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

@@ -10,6 +10,14 @@ from itertools import count
 from typing import Any
 
 
+# Unieke kolommen die de echte database afdwingt en die logica hier draagt.
+UNIQUE: dict[str, tuple[str, ...]] = {
+    "notifications": ("dedupe_key",),
+    "push_subscriptions": ("endpoint",),
+    "coach_runs": ("trigger_key",),
+}
+
+
 class _Result:
     def __init__(self, data: list[dict[str, Any]]) -> None:
         self.data = data
@@ -106,6 +114,18 @@ class _Query:
             added = self.payload if isinstance(self.payload, list) else [self.payload]
             written = []
             for item in added:
+                # Unieke kolommen echt afdwingen. Idempotentie via dedupe_key
+                # leunt volledig op de database, dus een dubbel zonder fout zou
+                # in een test slagen en in productie een tweede melding sturen.
+                for column in UNIQUE.get(self.table_name, ()):
+                    value = item.get(column)
+                    if value is None:
+                        continue
+                    if any(r.get(column) == value for r in rows):
+                        raise RuntimeError(
+                            f'duplicate key value violates unique constraint '
+                            f'"{self.table_name}_{column}_key" (23505)'
+                        )
                 row = {"id": next(self.store.ids), **item}
                 rows.append(row)
                 written.append(row)
