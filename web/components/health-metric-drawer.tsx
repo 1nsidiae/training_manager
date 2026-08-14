@@ -3,9 +3,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
   BatteryCharging,
   ChevronRight,
   Footprints,
@@ -28,6 +25,7 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MetricDelta, type MetricDeltaDirection, type MetricDeltaTone } from "@/components/ui/metric-delta";
 import type { Wellness } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -162,13 +160,16 @@ function signed(value: number, kind: HealthMetricKind) {
   return `${value > 0 ? "+" : value < 0 ? "−" : ""}${number}${unit}`;
 }
 
+function deltaDirection(delta: number | null) {
+  if (delta == null || Math.abs(delta) < 0.05) return "flat" satisfies MetricDeltaDirection;
+  return delta > 0 ? "up" : "down";
+}
+
 function toneFor(delta: number | null, direction: MetricConfig["goodDirection"] | "up") {
-  if (delta == null || Math.abs(delta) < 0.05) return "border-line bg-s3/70 text-muted";
-  if (direction === "neutral") return "border-strain/25 bg-strain/10 text-strain";
+  if (delta == null || Math.abs(delta) < 0.05) return "neutral" satisfies MetricDeltaTone;
+  if (direction === "neutral") return "info" satisfies MetricDeltaTone;
   const positive = direction === "up" ? delta > 0 : delta < 0;
-  return positive
-    ? "border-teal/25 bg-teal/10 text-teal"
-    : "border-danger/25 bg-danger/10 text-danger";
+  return positive ? "positive" : "negative";
 }
 
 export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }: Props) {
@@ -209,8 +210,6 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
   const periodAverage = average(chartData);
   const previousAverage = average(previousData);
   const periodDelta = periodAverage != null && previousAverage != null ? periodAverage - previousAverage : null;
-  const DirectionIcon = cardDelta == null || Math.abs(cardDelta) < 0.05 ? ArrowRight : cardDelta > 0 ? ArrowUp : ArrowDown;
-  const PeriodIcon = periodDelta == null || Math.abs(periodDelta) < 0.05 ? ArrowRight : periodDelta > 0 ? ArrowUp : ArrowDown;
   const formatter = config.format;
   const sparkValues = allPoints
     .filter((point) => point.day >= isoAtOffset(selectedDay, -13) && point.day <= selectedDay)
@@ -226,23 +225,13 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
                 <span className="numeral text-[2rem] font-bold text-ink">{formatter(current?.value ?? null, true)}</span>
                 {config.unit ? <span className="text-xs text-faint">{config.unit}</span> : null}
               </div>
-              <div
-                className={cn(
-                  "mt-1.5 inline-flex items-center gap-1 text-[9px] font-semibold",
-                  cardDelta == null || Math.abs(cardDelta) < 0.05
-                    ? "text-faint"
-                    : config.goodDirection === "neutral"
-                      ? "text-strain"
-                      : (config.goodDirection === "up" ? cardDelta > 0 : cardDelta < 0)
-                        ? "text-teal"
-                        : "text-danger",
-                )}
+              <MetricDelta
+                direction={deltaDirection(cardDelta)}
+                tone={toneFor(cardDelta, config.goodDirection)}
+                className="mt-1.5 text-[9px] font-semibold"
               >
-                <DirectionIcon className="size-3" />
-                <span>
-                  {cardDelta == null ? "geen vergelijking" : `${signed(cardDelta, kind)} vs vorige 7d`}
-                </span>
-              </div>
+                {cardDelta == null ? "geen vergelijking" : `${signed(cardDelta, kind)} vs vorige 7d`}
+              </MetricDelta>
             </div>
             <ChevronRight className="size-4 text-faint" />
           </div>
@@ -303,10 +292,13 @@ export function HealthMetricDrawer({ kind, wellness, vo2max = [], selectedDay }:
                 <div className="label">{kind === "steps" && period === "1" ? "Dagverloop" : "Ontwikkeling"}</div>
                 <div className="mt-1 text-[13px] font-semibold">Laatste {PERIOD_LABELS[period]}</div>
               </div>
-              <div className={cn("inline-flex h-7 items-center gap-1 rounded-md border px-2", toneFor(periodDelta, config.goodDirection))}>
-                <PeriodIcon className="size-3.5" />
-                <span className="text-[10px] font-bold">{periodDelta == null ? "–" : signed(periodDelta, kind)}</span>
-              </div>
+              <MetricDelta
+                direction={deltaDirection(periodDelta)}
+                tone={toneFor(periodDelta, config.goodDirection)}
+                className="h-7 text-[11px]"
+              >
+                {periodDelta == null ? "–" : signed(periodDelta, kind)}
+              </MetricDelta>
             </div>
             <div className="mt-3">
               {period === "1" ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowDown, ArrowRight, ArrowUp, HeartPulse, Info, MoonStar } from "lucide-react";
+import { Activity, HeartPulse, Info, MoonStar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InteractiveTrendChart } from "@/components/interactive-trend-chart";
 import { Ring } from "@/components/ring";
 import { SleepStageTimeline } from "@/components/sleep-stage-timeline";
+import { MetricDelta, type MetricDeltaDirection, type MetricDeltaTone } from "@/components/ui/metric-delta";
 import { hours } from "@/lib/format";
 import type { Wellness } from "@/lib/queries";
 
@@ -87,22 +88,13 @@ function formatDelta(kind: Kind, current: number | null, previous: number | null
 }
 
 function comparisonTone(delta: number | null | undefined) {
-  if (delta == null || delta === 0) {
-    return {
-      pill: "border-line bg-s3/70 text-muted",
-      icon: "text-faint",
-    };
-  }
-  if (delta > 0) {
-    return {
-      pill: "border-teal/25 bg-teal/10 text-teal",
-      icon: "text-teal",
-    };
-  }
-  return {
-    pill: "border-danger/25 bg-danger/10 text-danger",
-    icon: "text-danger",
-  };
+  if (delta == null || delta === 0) return "neutral" satisfies MetricDeltaTone;
+  return delta > 0 ? "positive" : "negative";
+}
+
+function comparisonDirection(delta: number | null | undefined) {
+  if (delta == null || delta === 0) return "flat" satisfies MetricDeltaDirection;
+  return delta > 0 ? "up" : "down";
 }
 
 function Comparison({
@@ -117,16 +109,20 @@ function Comparison({
   kind: Kind;
 }) {
   const comparison = formatDelta(kind, current, previous);
-  const Icon = !comparison || comparison.delta === 0 ? ArrowRight : comparison.delta > 0 ? ArrowUp : ArrowDown;
-  const changeTone = comparisonTone(comparison?.delta);
   return (
-    <div className="rounded-row bg-s2 px-3 py-3">
-      <div className="text-[10px] font-semibold text-faint">{label}</div>
-      <div className={`mt-2 inline-flex min-h-7 items-center gap-1 rounded-md border px-2 ${changeTone.pill}`}>
-        <Icon className={`size-3.5 ${changeTone.icon}`} />
-        <span className="numeral text-[15px] font-semibold">{comparison?.label ?? "–"}</span>
+    <div className="row min-w-0 px-3 py-3.5">
+      <div className="truncate text-[9px] font-bold uppercase tracking-[0.08em] text-faint">{label}</div>
+      <MetricDelta
+        direction={comparisonDirection(comparison?.delta)}
+        tone={comparisonTone(comparison?.delta)}
+        className="numeral mt-2 min-h-6 text-[17px] font-semibold tracking-[-0.02em]"
+      >
+        {comparison?.label ?? "–"}
+      </MetricDelta>
+      <div className="mt-1.5 flex min-w-0 items-baseline gap-1 text-[9px] font-medium text-faint">
+        <span>Was</span>
+        <span className="numeral truncate text-[10px] font-semibold text-muted">{formatMetric(kind, previous)}</span>
       </div>
-      <div className="micro mt-1.5">Vorige: {formatMetric(kind, previous)}</div>
     </div>
   );
 }
@@ -143,17 +139,18 @@ function AverageComparison({
   kind: Kind;
 }) {
   const comparison = formatDelta(kind, current, previous);
-  const Icon = !comparison || comparison.delta === 0 ? ArrowRight : comparison.delta > 0 ? ArrowUp : ArrowDown;
-  const changeTone = comparisonTone(comparison?.delta);
 
   return (
     <div className="row p-3">
       <div className="micro">{label}</div>
       <div className="numeral mt-2 text-[20px]">{formatMetric(kind, current, true)}</div>
-      <div className={`mt-2 inline-flex min-h-6 items-center gap-1 rounded-md border px-1.5 ${changeTone.pill}`}>
-        <Icon className={`size-3 ${changeTone.icon}`} />
-        <span className="text-[10px] font-bold">{comparison?.label ?? "Geen vergelijking"}</span>
-      </div>
+      <MetricDelta
+        direction={comparisonDirection(comparison?.delta)}
+        tone={comparisonTone(comparison?.delta)}
+        className="mt-2 min-h-6"
+      >
+        {comparison?.label ?? "Geen vergelijking"}
+      </MetricDelta>
     </div>
   );
 }
@@ -260,9 +257,9 @@ export function BiometricMetricDrawer({ kind, latest, series, selectedDay, tone 
 
             <TabsContent value="overview" className="space-y-4">
               <div className="grid grid-cols-3 gap-2">
-                <Comparison label="vs gisteren" current={current} previous={yesterday} kind={kind} />
-                <Comparison label="vs vorige 7d" current={avg7} previous={previous7} kind={kind} />
-                <Comparison label="vs vorige 28d" current={avg28} previous={previous28} kind={kind} />
+                <Comparison label="Gisteren" current={current} previous={yesterday} kind={kind} />
+                <Comparison label="Vorige 7 dagen" current={avg7} previous={previous7} kind={kind} />
+                <Comparison label="Vorige 28 dagen" current={avg28} previous={previous28} kind={kind} />
               </div>
 
               <Card className="px-4 py-1">

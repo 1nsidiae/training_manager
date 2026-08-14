@@ -1,5 +1,9 @@
 # WHOOP-aligned Biometric Performance — Design Language
 
+> De afdwingbare implementatieregels staan in
+> [`design-system/README.md`](design-system/README.md). Dit document beschrijft
+> de bredere visuele en merkcontext.
+
 A reusable mobile design language derived from the supplied reference material and the official WHOOP Brand & Design Guidelines. It adopts the official color roles, typography hierarchy and data-presentation principles without using the WHOOP logo, implying affiliation, or renaming Garmin metrics as proprietary WHOOP scores.
 
 ## 1. Design principles

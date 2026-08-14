@@ -158,10 +158,12 @@ export async function requestNewPlan(input: NewPlanRequest): Promise<NewPlanResu
     return { ok: false, error: "Je sessie is verlopen. Log opnieuw in.", requestId: null, goalId: null };
   }
 
-  const [{ data: activePlan }, { data: existingProposal }] = await Promise.all([
-    sb.from("plans").select("id").eq("status", "active").limit(1).maybeSingle(),
-    sb.from("plans").select("id").eq("status", "proposed").limit(1).maybeSingle(),
-  ]);
+  const [{ data: activePlan }, { data: existingProposal }, { data: activeGoal }] =
+    await Promise.all([
+      sb.from("plans").select("id").eq("status", "active").limit(1).maybeSingle(),
+      sb.from("plans").select("id").eq("status", "proposed").limit(1).maybeSingle(),
+      sb.from("goals").select("id").eq("status", "active").limit(1).maybeSingle(),
+    ]);
   if (existingProposal) {
     return {
       ok: false,
@@ -206,14 +208,20 @@ export async function requestNewPlan(input: NewPlanRequest): Promise<NewPlanResu
     limitations: input.limitations.trim() || null,
   };
 
-  // Bij een bestaand schema blijft het nieuwe doel bewust gearchiveerd tot de
-  // atleet het bijbehorende planvoorstel goedkeurt. Zo blijft afwijzen veilig.
+  // Het nieuwe doel blijft gearchiveerd tot het bijbehorende planvoorstel wordt
+  // goedgekeurd. Zo blijft afwijzen veilig.
+  //
+  // De archiveerbeslissing hangt aan het bestaande DOEL, niet aan het bestaande
+  // plan: de database staat via `goals_single_active` maar één actief doel toe.
+  // Op de plannen kijken ging mis zodra er wel een actief doel was maar geen
+  // actief plan — dan sloeg deze insert stuk op de unieke index en kreeg je
+  // alleen "kon niet veilig worden opgeslagen" te zien.
   const { data: goal, error: goalError } = await sb
     .from("goals")
     .insert({
       goal_type: input.goalType,
       name: goalName(input),
-      status: activePlan ? "archived" : "active",
+      status: activePlan || activeGoal ? "archived" : "active",
       target_date: input.targetDate,
       target_distance_m: input.targetDistanceM,
       target_time_s: input.targetTimeS,
@@ -222,7 +230,16 @@ export async function requestNewPlan(input: NewPlanRequest): Promise<NewPlanResu
     .select("id")
     .single();
   if (goalError || !goal) {
-    return { ok: false, error: "Je trainingsdoel kon niet veilig worden opgeslagen.", requestId: null, goalId: null };
+    console.error("doel opslaan mislukt", goalError);
+    return {
+      ok: false,
+      error:
+        goalError?.code === "23505"
+          ? "Er is al een actief trainingsdoel. Archiveer dat eerst, of beoordeel het openstaande voorstel."
+          : "Je trainingsdoel kon niet veilig worden opgeslagen.",
+      requestId: null,
+      goalId: null,
+    };
   }
 
   const { data: request, error: requestError } = await sb

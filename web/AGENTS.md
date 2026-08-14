@@ -7,3 +7,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Training Manager design system
+
+Lees vóór iedere UI-wijziging `../docs/design-system/README.md` en de daar
+gelinkte componentregels. Nieuwe UI moet de bestaande Tailwind-tokens en
+shadcn/Radix-primitives hergebruiken. Numerieke trends en vergelijkingen
+gebruiken `components/ui/metric-delta.tsx`; gebruik daarvoor geen `Badge`.

@@ -110,7 +110,7 @@ export default async function CoachPage() {
     monthChat.reduce((n, message) => n + Number(message.metadata?.cost_usd ?? 0), 0);
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-5">
       <ScreenHeader
         eyebrow="Persoonlijke begeleiding"
         title="Coach"

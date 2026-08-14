@@ -310,6 +310,31 @@ def generate_plan(
     )
 
 
+def activate_goal(sb: Client, goal_id: int) -> None:
+    """Eén actief doel, en het volgt het actieve plan.
+
+    `goals_single_active` staat maar één actief doel toe. Een plan dat meteen
+    actief wordt — dat gebeurt wanneer er nog geen schema is, dus zonder
+    goedkeuringsscherm — zou zijn doel anders gearchiveerd achterlaten. De
+    worker plant dan verder voor het vórige doel terwijl het schema van het
+    nieuwe komt, en dat verschil is nergens zichtbaar.
+
+    Eerst archiveren, dan activeren: andersom botst de unieke index.
+    """
+    others = (
+        sb.table("goals")
+        .select("id")
+        .eq("status", "active")
+        .neq("id", goal_id)
+        .execute()
+        .data
+    )
+    for row in others:
+        sb.table("goals").update({"status": "archived"}).eq("id", row["id"]).execute()
+        log.info("vorig doel %s gearchiveerd", row["id"])
+    sb.table("goals").update({"status": "active"}).eq("id", goal_id).execute()
+
+
 def _persist(
     sb: Client,
     goal: dict[str, Any],
@@ -329,6 +354,7 @@ def _persist(
     # anders zou een afgewezen voorstel Jasper zonder schema achterlaten.
     if status == "active":
         sb.table("plans").update({"status": "superseded"}).eq("status", "active").execute()
+        activate_goal(sb, int(goal["id"]))
 
     existing = (
         sb.table("plans")

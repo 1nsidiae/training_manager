@@ -83,16 +83,40 @@ export function PlanApproval({
     // Een voorstel van de doelwizard wijst naar een nieuw, nog gearchiveerd
     // doel. Activeer dat doel pas samen met het plan; afwijzen laat het huidige
     // doel daardoor volledig intact.
-    if (currentPlan && currentPlan.goal_id !== plan.goal_id) {
-      const { error: archiveGoalError } = await sb
-        .from("goals")
-        .update({ status: "archived" })
-        .eq("id", currentPlan.goal_id)
-        .eq("status", "active");
-      if (archiveGoalError) {
-        setError("Je huidige doel kon niet veilig worden bewaard. Probeer opnieuw.");
-        setBusy(null);
-        return;
+    //
+    // Welk doel er nu actief is, vragen we aan de doelen zelf. Het afleiden uit
+    // het huidige plan ging mis zodra er geen actief plan was: dan sloeg deze
+    // hele wissel over en bleef het nieuwe doel gearchiveerd terwijl zijn plan
+    // wél actief werd — waarna de worker verder plande voor het oude doel.
+    const { data: activeGoal } = await sb
+      .from("goals")
+      .select("id")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    const previousGoalId: number | null = activeGoal?.id ?? null;
+    const swapGoal = previousGoalId !== plan.goal_id;
+
+    async function restoreGoal() {
+      if (!swapGoal) return;
+      await sb.from("goals").update({ status: "archived" }).eq("id", plan.goal_id);
+      if (previousGoalId !== null) {
+        await sb.from("goals").update({ status: "active" }).eq("id", previousGoalId);
+      }
+    }
+
+    if (swapGoal) {
+      if (previousGoalId !== null) {
+        const { error: archiveGoalError } = await sb
+          .from("goals")
+          .update({ status: "archived" })
+          .eq("id", previousGoalId)
+          .eq("status", "active");
+        if (archiveGoalError) {
+          setError("Je huidige doel kon niet veilig worden bewaard. Probeer opnieuw.");
+          setBusy(null);
+          return;
+        }
       }
 
       const { error: activateGoalError } = await sb
@@ -100,7 +124,9 @@ export function PlanApproval({
         .update({ status: "active" })
         .eq("id", plan.goal_id);
       if (activateGoalError) {
-        await sb.from("goals").update({ status: "active" }).eq("id", currentPlan.goal_id);
+        if (previousGoalId !== null) {
+          await sb.from("goals").update({ status: "active" }).eq("id", previousGoalId);
+        }
         setError("Het nieuwe trainingsdoel kon niet worden geactiveerd. Je oude doel blijft actief.");
         setBusy(null);
         return;
@@ -114,10 +140,7 @@ export function PlanApproval({
         .eq("id", currentPlan.id)
         .eq("status", "active");
       if (demoteError) {
-        if (currentPlan.goal_id !== plan.goal_id) {
-          await sb.from("goals").update({ status: "archived" }).eq("id", plan.goal_id);
-          await sb.from("goals").update({ status: "active" }).eq("id", currentPlan.goal_id);
-        }
+        await restoreGoal();
         setError("Je huidige plan kon niet veilig worden bewaard. Probeer opnieuw.");
         setBusy(null);
         return;
@@ -132,11 +155,8 @@ export function PlanApproval({
     if (activateError) {
       if (currentPlan) {
         await sb.from("plans").update({ status: "active" }).eq("id", currentPlan.id);
-        if (currentPlan.goal_id !== plan.goal_id) {
-          await sb.from("goals").update({ status: "archived" }).eq("id", plan.goal_id);
-          await sb.from("goals").update({ status: "active" }).eq("id", currentPlan.goal_id);
-        }
       }
+      await restoreGoal();
       setError("Het nieuwe plan kon niet worden toegepast. Je oude plan blijft actief.");
       setBusy(null);
       return;

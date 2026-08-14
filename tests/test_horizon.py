@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 
 from tests.fake_supabase import FakeSB
-from tm_coach.engine import _frozen_rows, commitment_horizon
+from tm_coach.engine import _frozen_rows, activate_goal, commitment_horizon
 
 WEDNESDAY = date(2026, 8, 12)
 SUNDAY = date(2026, 8, 16)
@@ -64,6 +64,26 @@ class OvernemenTest(unittest.TestCase):
         rows = _frozen_rows(self._store(), WEDNESDAY, SUNDAY)
         self.assertNotIn("completed", [r["status"] for r in rows])
         self.assertNotIn("skipped", [r["status"] for r in rows])
+
+
+class ActiefDoelTest(unittest.TestCase):
+    """De database staat één actief doel toe; de code ging uit van het plan."""
+
+    def test_het_vorige_doel_wordt_gearchiveerd(self) -> None:
+        sb = FakeSB({"goals": [{"id": 4, "status": "active"}, {"id": 5, "status": "archived"}]})
+        activate_goal(sb, 5)
+        self.assertEqual(sb.row("goals", 4)["status"], "archived")
+        self.assertEqual(sb.row("goals", 5)["status"], "active")
+
+    def test_een_al_actief_doel_blijft_gewoon_actief(self) -> None:
+        sb = FakeSB({"goals": [{"id": 5, "status": "active"}]})
+        activate_goal(sb, 5)
+        self.assertEqual(sb.row("goals", 5)["status"], "active")
+
+    def test_zonder_vorig_doel_werkt_het_ook(self) -> None:
+        sb = FakeSB({"goals": [{"id": 5, "status": "archived"}]})
+        activate_goal(sb, 5)
+        self.assertEqual(sb.row("goals", 5)["status"], "active")
 
 
 if __name__ == "__main__":

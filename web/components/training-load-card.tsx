@@ -1,8 +1,8 @@
-import { ArrowDownRight, ArrowUpRight, Gauge, Minus } from "lucide-react";
+import { ArrowUpRight, Gauge } from "lucide-react";
 import { DetailDrawer } from "@/components/detail-drawer";
 import { InteractiveBarChart, type InteractiveBarDatum } from "@/components/interactive-bar-chart";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { MetricDelta, type MetricDeltaDirection, type MetricDeltaTone } from "@/components/ui/metric-delta";
 import { duration } from "@/lib/format";
 import type { TrainingLoadSummary } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -31,24 +31,23 @@ function dayLabel(day: string) {
 function comparison(summary: TrainingLoadSummary) {
   if (summary.deltaPct == null) {
     return summary.currentLoad > 0
-      ? { label: "Eerste belasting in 14 dagen", variant: "strain" as const, icon: ArrowUpRight }
-      : { label: "Geen belasting in 7 dagen", variant: "outline" as const, icon: Minus };
+      ? { label: "Eerste belasting in 14 dagen", tone: "info" as MetricDeltaTone, direction: "up" as MetricDeltaDirection }
+      : { label: "Geen belasting in 7 dagen", tone: "neutral" as MetricDeltaTone, direction: "flat" as MetricDeltaDirection };
   }
   if (summary.deltaPct > 20) {
-    return { label: `+${summary.deltaPct}% vs vorige 7d`, variant: "warning" as const, icon: ArrowUpRight };
+    return { label: `+${summary.deltaPct}% vs vorige 7d`, tone: "warning" as MetricDeltaTone, direction: "up" as MetricDeltaDirection };
   }
   if (summary.deltaPct > 0) {
-    return { label: `+${summary.deltaPct}% vs vorige 7d`, variant: "strain" as const, icon: ArrowUpRight };
+    return { label: `+${summary.deltaPct}% vs vorige 7d`, tone: "info" as MetricDeltaTone, direction: "up" as MetricDeltaDirection };
   }
   if (summary.deltaPct < 0) {
-    return { label: `${summary.deltaPct}% vs vorige 7d`, variant: "recovery" as const, icon: ArrowDownRight };
+    return { label: `${summary.deltaPct}% vs vorige 7d`, tone: "recovery" as MetricDeltaTone, direction: "down" as MetricDeltaDirection };
   }
-  return { label: "Gelijk aan vorige 7d", variant: "outline" as const, icon: Minus };
+  return { label: "Gelijk aan vorige 7d", tone: "neutral" as MetricDeltaTone, direction: "flat" as MetricDeltaDirection };
 }
 
 export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) {
   const delta = comparison(summary);
-  const DeltaIcon = delta.icon;
   const totalSportLoad = summary.sports.reduce((sum, sport) => sum + sport.load, 0);
   const chartData: InteractiveBarDatum[] = summary.days.map((day, index) => ({
     id: day.day,
@@ -84,9 +83,9 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
                 </div>
                 <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint" />
               </div>
-              <Badge variant={delta.variant} className="mt-2">
-                <DeltaIcon className="size-3" /> {delta.label}
-              </Badge>
+              <MetricDelta direction={delta.direction} tone={delta.tone} className="mt-2">
+                {delta.label}
+              </MetricDelta>
             </div>
           </div>
 
