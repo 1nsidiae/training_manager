@@ -92,6 +92,40 @@ def _preserve_sleep_detail(
     return {"daily_summary": current, "sleep_detail": detail}
 
 
+def _preserve_wellness_details(
+    current_raw: dict[str, Any] | None,
+    existing_raw: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Behoud eerder opgehaalde slaap- en stappentijdlijnen bij API-gaten."""
+    current = current_raw if isinstance(current_raw, dict) else {}
+    existing = existing_raw if isinstance(existing_raw, dict) else {}
+    result = current
+
+    for key, content_key in (
+        ("sleep_detail", "levels"),
+        ("steps_detail", "buckets"),
+        ("intraday_detail", None),
+    ):
+        current_detail = result.get(key) if isinstance(result, dict) else None
+        if isinstance(current_detail, dict) and (
+            content_key is None or current_detail.get(content_key)
+        ):
+            continue
+
+        existing_detail = existing.get(key)
+        if not isinstance(existing_detail, dict) or (
+            content_key is not None and not existing_detail.get(content_key)
+        ):
+            continue
+
+        if "daily_summary" in result:
+            result = {**result, key: existing_detail}
+        else:
+            result = {"daily_summary": result, key: existing_detail}
+
+    return result
+
+
 def sync_wellness(
     garmin: Garmin, sb: Client, settings: Settings, start: str, end: str
 ) -> int:
@@ -188,8 +222,43 @@ def sync_wellness(
         summary = safe_call(f"get_stats({day})", garmin.get_stats, day)
         _merge(days, mappers.map_daily_summary(summary or {}))
 
+    # De dagtotalen hierboven zijn voldoende voor 7d/4w/1j. Voor de 1d-tab
+    # halen we Garmins echte kwartierblokken op en bewaren we ze compact.
+    intraday_start = (date.fromisoformat(end) - timedelta(days=13)).isoformat()
+    step_days = [
+        d
+        for d, row in days.items()
+        if d >= intraday_start and row.get("steps") is not None
+    ]
+    log.info("intraday-stappen ophalen voor %d dagen", len(step_days))
+    for day in sorted(step_days):
+        throttle.wait()
+        entries = safe_call(f"get_steps_data({day})", garmin.get_steps_data, day)
+        _merge(
+            days,
+            mappers.map_steps_detail(
+                day,
+                entries or [],
+                days.get(day, {}).get("raw"),
+            ),
+        )
+
+        throttle.wait()
+        stress = safe_call(f"get_stress_data({day})", garmin.get_stress_data, day)
+        throttle.wait()
+        heart_rate = safe_call(f"get_heart_rates({day})", garmin.get_heart_rates, day)
+        _merge(
+            days,
+            mappers.map_intraday_detail(
+                day,
+                stress or {},
+                heart_rate or {},
+                days.get(day, {}).get("raw"),
+            ),
+        )
+
     for day, row in days.items():
-        row["raw"] = _preserve_sleep_detail(row.get("raw"), existing_raw.get(day))
+        row["raw"] = _preserve_wellness_details(row.get("raw"), existing_raw.get(day))
 
     rows = _normalize(list(days.values()), {"raw": {}})
     for i in range(0, len(rows), 100):

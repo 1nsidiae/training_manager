@@ -246,6 +246,78 @@ def map_sleep_detail(
     }
 
 
+def map_steps_detail(
+    day: str,
+    entries: list[dict[str, Any]],
+    existing_raw: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Bewaar Garmins stappenblokken voor de intraday-grafiek.
+
+    `get_steps_data` levert doorgaans intervallen van 15 minuten. We bewaren
+    alleen tijd en stappen; activiteitslabels en andere responsevelden zijn
+    niet nodig om de uurverdeling te tekenen.
+    """
+    buckets = []
+    for entry in entries:
+        start = entry.get("startGMT")
+        end = entry.get("endGMT")
+        steps = _int(entry.get("steps"))
+        if start and end and steps is not None and steps >= 0:
+            buckets.append({"start_gmt": start, "end_gmt": end, "steps": steps})
+
+    if not buckets:
+        return None
+
+    current = existing_raw if isinstance(existing_raw, dict) else {}
+    if "daily_summary" in current:
+        raw = {**current}
+    else:
+        raw = {"daily_summary": current}
+    raw["steps_detail"] = {"buckets": buckets}
+    return {"day": day, "raw": raw}
+
+
+def map_intraday_detail(
+    day: str,
+    stress_entry: dict[str, Any],
+    heart_rate_entry: dict[str, Any],
+    existing_raw: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Bewaar compacte Garmin-dagreeksen voor gezondheidsgrafieken."""
+
+    def pairs(values: Any, value_index: int, *, stress: bool = False) -> list[dict[str, Any]]:
+        points = []
+        for item in values or []:
+            if not isinstance(item, (list, tuple)) or len(item) <= value_index:
+                continue
+            timestamp = _int(item[0])
+            value = _num(item[value_index])
+            if timestamp is None or value is None:
+                continue
+            # Garmin gebruikt -1 voor rust en -2 voor onbekend/niet gedragen.
+            if stress and value == -1:
+                value = 0
+            elif value < 0:
+                continue
+            points.append({"timestamp_ms": timestamp, "value": value})
+        return points
+
+    stress = pairs(stress_entry.get("stressValuesArray"), 1, stress=True)
+    body_battery = pairs(stress_entry.get("bodyBatteryValuesArray"), 2)
+    heart_rate = pairs(heart_rate_entry.get("heartRateValues"), 1)
+    if not stress and not body_battery and not heart_rate:
+        return None
+
+    current = existing_raw if isinstance(existing_raw, dict) else {}
+    raw = {**current} if "daily_summary" in current else {"daily_summary": current}
+    raw["intraday_detail"] = {
+        "stress": stress,
+        "body_battery": body_battery,
+        "heart_rate": heart_rate,
+    }
+    return {"day": day, "raw": raw}
+
+
 def map_vo2max(entry: dict[str, Any]) -> dict[str, Any] | None:
     generic = entry.get("generic") or {}
     day = generic.get("calendarDate")
