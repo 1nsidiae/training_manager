@@ -157,6 +157,12 @@ def generate_plan(
     model = MODEL_BY_TRIGGER.get(trigger, "claude-opus-5")
 
     context = build_context(sb, goal, weeks)
+
+    # Vóór de eerste betaalde aanroep: spreekt de context zichzelf tegen? Een
+    # onvervulbare opdracht laat het model oscilleren tot de pogingen op zijn,
+    # en dat kost drie Opus-aanroepen zonder dat er een plan uitkomt.
+    require_consistent(context)
+
     if trigger_reason:
         context["trigger_context"] = {
             "trigger": trigger,
