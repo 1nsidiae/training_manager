@@ -32,7 +32,11 @@ uv.lock
 **/node_modules
 **/.next
 **/tsconfig.tsbuildinfo
+# Zonder de tweede regel glipte web/.env.local mee het image in: deze patronen
+# gelden vanaf de contextroot, en die is sinds de contextwijziging de repo-root.
 .env
 .env.*
+web/.env
+web/.env.*
 !.env.example
 !.env.production.example
