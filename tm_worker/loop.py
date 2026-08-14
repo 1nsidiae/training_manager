@@ -23,6 +23,7 @@ from tm_sync import workouts as workouts_mod
 from tm_sync.clients import garmin_client, supabase_client
 from tm_sync.config import Settings, load_settings
 
+from . import adjust as adjust_mod
 from . import triggers as triggers_mod
 
 log = logging.getLogger(__name__)
@@ -318,7 +319,12 @@ def tick(
     with_coach: bool = True,
 ) -> dict[str, Any]:
     today = clock.today()
-    result: dict[str, Any] = {"synced": 0, "triggers": [], "plan": None}
+    result: dict[str, Any] = {
+        "synced": 0,
+        "adjustments": [],
+        "triggers": [],
+        "plan": None,
+    }
 
     try:
         result["token_warning"] = check_token_expiry(sb, settings)
@@ -443,6 +449,23 @@ def tick(
     )
     if plan_rows:
         triggers_mod.mark_skipped(sb, plan_rows[0]["id"], today)
+
+        # Eerst gratis bijstellen, dan pas kijken of er nog een modelaanroep
+        # nodig is. Een pijnmelding moet vandaag effect hebben op het horloge,
+        # niet pas wanneer de coach klaar is met vier weken herplannen.
+        try:
+            result["adjustments"] = [
+                {
+                    "rule": change.rule,
+                    "day": change.day,
+                    "from": change.from_type,
+                    "to": change.to_type,
+                    "why": change.explanation_nl,
+                }
+                for change in adjust_mod.apply(sb, plan_rows[0]["id"], today)
+            ]
+        except Exception as exc:  # noqa: BLE001 - bijstellen mag de tick niet vellen
+            log.error("bijstellen mislukt: %s: %s", type(exc).__name__, exc)
 
     found = triggers_mod.detect(sb, today)
     if preworkout_request and request:

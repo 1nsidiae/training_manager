@@ -40,6 +40,22 @@ def _sessions(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return [s for week in plan.get("weeks", []) for s in week.get("sessions", [])]
 
 
+def _window_start(context: dict[str, Any]) -> date:
+    """Vanaf welke dag meten de zevendaagse plafonds?
+
+    Normaal vandaag. Ligt de lopende week vast, dan begint het model pas erna,
+    en zou een venster vanaf vandaag grotendeels leeg zijn — waardoor het plafond
+    altijd zou slagen zonder ook maar iets te controleren. Een guardrail die
+    niets kan afkeuren is gevaarlijker dan geen guardrail, want hij wekt de
+    indruk dat er gecontroleerd is.
+    """
+    today = date.fromisoformat(context["today"])
+    frozen_until = (context.get("plan_window") or {}).get("frozen_until")
+    if not frozen_until:
+        return today
+    return max(today, date.fromisoformat(frozen_until) + timedelta(days=1))
+
+
 def _mmss(seconds: int) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
@@ -134,6 +150,71 @@ def validate(
                     )
                 )
 
+    # --- De toezeggingshorizon ----------------------------------------------
+    # Wat al vaststaat voor deze week staat vast. Het model plant vanaf de dag
+    # erna; een sessie ervoor zou stil een dag overschrijven die al op het
+    # horloge staat en waarvan de atleet uitgaat.
+    frozen_until = plan_window.get("frozen_until")
+    if frozen_until:
+        for session in sessions:
+            if session["date"] <= frozen_until:
+                problems.append(
+                    Violation(
+                        "commitment_horizon",
+                        f"Sessie op {session['date']} valt binnen de vastgelegde week "
+                        f"(tot en met {frozen_until}); die dagen staan al vast en "
+                        "worden ongewijzigd overgenomen.",
+                        session["date"],
+                    )
+                )
+
+    # --- Pijn wint van het schema -------------------------------------------
+    # De kernregel tegen een nieuwe blessure. Ze stond actief in `coach_rules`
+    # en werd tot nu toe nergens getoetst: een pijnmelding startte hoogstens een
+    # herplanning en niets controleerde of dat plan de pijn ook respecteerde.
+    pain_signal = (context.get("constraints") or {}).get("pain_signal")
+    if pain_signal:
+        rest_until = str(pain_signal.get("no_intensity_until") or "")
+        for session in sessions:
+            if session["date"] > rest_until:
+                continue
+            if session["session_type"] in INTENSITY_TYPES:
+                problems.append(
+                    Violation(
+                        "pain_score_override",
+                        f"Pijnscore {pain_signal.get('pain_score')} op "
+                        f"{pain_signal.get('day')} haalt de drempel van "
+                        f"{pain_signal.get('threshold')}; tot en met {rest_until} "
+                        f"hoort er geen {session['session_type']} in het schema "
+                        f"({session['date']}).",
+                        session["date"],
+                    )
+                )
+            elif session["session_type"] != "rest" and not (session.get("hr_cap") or 0):
+                problems.append(
+                    Violation(
+                        "pain_score_override",
+                        f"Na een pijnmelding heeft elke sessie tot en met {rest_until} "
+                        f"een HR-bovengrens nodig; {session['date']} heeft er geen.",
+                        session["date"],
+                    )
+                )
+
+    # --- Lage readiness schrapt kwaliteit van vandaag -----------------------
+    low_readiness = (context.get("constraints") or {}).get("low_readiness_today")
+    if low_readiness:
+        for session in sessions:
+            if session["date"] == context["today"] and session["session_type"] in QUALITY_TYPES:
+                problems.append(
+                    Violation(
+                        "readiness_gate_quality",
+                        f"Training Readiness is {low_readiness.get('score')}, onder de "
+                        f"drempel van {low_readiness.get('threshold')}; vandaag "
+                        f"({session['date']}) past geen {session['session_type']}.",
+                        session["date"],
+                    )
+                )
+
     # --- HR-bovengrens verplicht op rustige sessies -------------------------
     zones = context["athlete"].get("hr_zones") or []
     zone2_high = next((z["high"] for z in zones if z.get("zone") == 2), None)
@@ -220,7 +301,7 @@ def validate(
     # week invult, maar niet besluiten dat twee gemiste en zwaar ervaren runs
     # toch geen aanpassing nodig hebben.
     if constraints.get("repeated_heavy_target_misses"):
-        window_start = date.fromisoformat(context["today"])
+        window_start = _window_start(context)
         window_end = window_start + timedelta(days=6)
         window_sessions = [
             session
@@ -444,7 +525,7 @@ def validate(
                     or last_actual
                     or 0
                 )
-                window_start = date.fromisoformat(context["today"])
+                window_start = _window_start(context)
                 window_end = window_start + timedelta(days=6)
                 next_7d_distance = sum(
                     float(session.get("planned_distance_m") or 0)

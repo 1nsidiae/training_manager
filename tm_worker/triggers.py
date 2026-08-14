@@ -4,6 +4,17 @@ De worker trekt, niets duwt: geen webhook, geen inkomende poort. Elke trigger
 draagt een stabiele `key` die in `coach_runs.trigger_key` uniek is opgeslagen,
 zodat dezelfde gebeurtenis nooit twee herplanningen veroorzaakt — ook niet als
 de worker vaker draait dan bedoeld of halverwege afbreekt.
+
+Wat hier staat is *herplannen*: het dure werkwoord. Elke trigger hieronder kost
+een modelaanroep, dus de lat ligt hoog. Alles wat met een berekening kan worden
+opgelost — een gemiste sessie, een lage readiness, een pijnmelding die vandaag
+al effect moet hebben — hoort in `adjust.py` en staat hier bewust niet meer.
+
+Een gemiste sessie en een ingevulde feedback waren hier ooit wél triggers. Dat
+leverde op één nacht twee volledige herplanningen op die allebei door de
+guardrails werden afgekeurd: het schema wijzigde niet en het kostte wel geld.
+De regel is nu: het model komt erbij als het *schema* niet meer klopt, niet als
+de *dag* niet klopt.
 """
 
 from __future__ import annotations
@@ -15,24 +26,32 @@ from typing import Any
 
 from supabase import Client
 
-from tm_sync import compliance
+from tm_sync import clock, compliance
+
+from . import adjust
 
 log = logging.getLogger(__name__)
 
 # Zwaarste eerst. Er gaat hoogstens één coach-aanroep per tick de deur uit:
 # vier herplanningen achter elkaar kosten geld en leveren niets extra op.
+# `goal_changed` en `manual` komen uit `loop.py` en worden vooraan ingevoegd;
+# ze staan hier zodat de sortering ze kent als ze ooit uit detectie komen.
 PRIORITY = [
     "alarm",
-    "run_completed",
-    "activity_completed",
-    "session_skipped",
+    "goal_changed",
+    "manual",
+    "plan_drift",
+    "block_end",
     "weekly_review",
 ]
 
 HRV_UNBALANCED_DAYS = 3
 LOW_READINESS_DAYS = 3
-NON_RUNNING_LOAD_TRIGGER = 40
-NON_RUNNING_DURATION_TRIGGER_S = 45 * 60
+
+# Een blok dat over minder dan een week opraakt, moet worden opgevolgd. Dit is
+# de enige trigger die uit zichzelf een nieuw blok laat maken; zonder hem loopt
+# het schema stil af en staat er op een dinsdag ineens niets meer.
+BLOCK_END_DAYS = 7
 
 
 @dataclass
@@ -54,13 +73,6 @@ def _handled_keys(sb: Client) -> set[str]:
         .data
     )
     return {r["trigger_key"] for r in rows}
-
-
-def _rule_params(sb: Client) -> dict[str, dict[str, Any]]:
-    rows = (
-        sb.table("coach_rules").select("key, params").eq("status", "active").execute().data
-    )
-    return {r["key"]: (r["params"] or {}) for r in rows}
 
 
 def _active_plan(sb: Client) -> dict[str, Any] | None:
@@ -97,7 +109,7 @@ def mark_skipped(sb: Client, plan_id: int, today: date) -> list[int]:
 def detect(sb: Client, today: date | None = None) -> list[Trigger]:
     today = today or clock.today()
     handled = _handled_keys(sb)
-    params = _rule_params(sb)
+    params = adjust.rule_params(sb)
     found: list[Trigger] = []
 
     plan = _active_plan(sb)
@@ -203,81 +215,50 @@ def detect(sb: Client, today: date | None = None) -> list[Trigger]:
             )
         )
 
-    # --- run afgerond met feedback ---------------------------------------
-    for fb in recent_feedback:
-        found.append(
-            Trigger(
-                "run_completed",
-                f"run_completed:feedback={fb['id']}",
-                f"feedback ingevuld: pijn {fb.get('pain_score')}, "
-                f"uithouding {fb.get('endurance_score')}",
-            )
-        )
-
-    # --- relevante niet-hardloopactiviteit afgerond ----------------------
-    # Een korte wandeling hoeft geen betaalde herplanning te starten. Een
-    # stevige zwem-, fiets- of krachtsessie verandert de herstelcontext wel.
-    # Maximaal één trigger per kalenderdag voorkomt meerdere coachcalls als
-    # Garmin in één sync verschillende activiteiten aanlevert.
+    # --- het schema drijft af ---------------------------------------------
+    # Eén gemiste sessie zegt iets over die dag; drie in twee weken zeggen iets
+    # over het schema. Alleen het tweede rechtvaardigt een modelaanroep. De
+    # sleutel bevat het aantal, zodat een vierde misser opnieuw telt maar
+    # dezelfde stand niet twee keer.
     if plan:
-        cross_training = (
-            sb.table("activities")
-            .select("id, sport, sub_sport, name, duration_s, raw")
-            .gte("start_time_local", today.isoformat())
-            .neq("sport", "running")
-            .order("start_time_local", desc=True)
-            .execute()
-            .data
-        )
-        relevant = []
-        for activity in cross_training:
-            raw = activity.get("raw") or {}
-            try:
-                training_load = float(raw.get("activityTrainingLoad") or 0)
-            except (TypeError, ValueError):
-                training_load = 0.0
-            duration_s = float(activity.get("duration_s") or 0)
-            if (
-                training_load >= NON_RUNNING_LOAD_TRIGGER
-                or duration_s >= NON_RUNNING_DURATION_TRIGGER_S
-            ):
-                relevant.append((activity, training_load, duration_s))
-
-        if relevant:
-            activity, training_load, duration_s = max(
-                relevant,
-                key=lambda item: (item[1], item[2]),
-            )
-            label = activity.get("name") or activity.get("sub_sport") or activity["sport"]
+        missed = adjust.missed_recent(sb, plan["id"], today)
+        if len(missed) >= adjust.MISSED_REPLAN_THRESHOLD:
+            days = ", ".join(str(m["day"]) for m in missed[:4])
             found.append(
                 Trigger(
-                    "activity_completed",
-                    f"activity_completed:{today.isoformat()}",
-                    f"{label}: {duration_s / 60:.0f} min, Garmin Training Load "
-                    f"{training_load:.0f}",
+                    "plan_drift",
+                    f"plan_drift:plan={plan['id']}:missed={len(missed)}",
+                    f"{len(missed)} sessies gemist in "
+                    f"{adjust.MISSED_WINDOW_DAYS} dagen ({days}); het schema sluit "
+                    "niet meer aan op wat er werkelijk gebeurt",
                 )
             )
 
-    # --- geskipte sessies -------------------------------------------------
+    # --- het blok loopt af -------------------------------------------------
+    # Zonder deze trigger eindigt een schema stilletjes: op een dinsdag staat er
+    # gewoon niets meer en niets vraagt om een vervolg.
     if plan:
-        skipped = (
+        last = (
             sb.table("plan_sessions")
-            .select("id, day")
+            .select("day")
             .eq("plan_id", plan["id"])
-            .eq("status", "skipped")
             .order("day", desc=True)
-            .limit(3)
+            .limit(1)
             .execute()
             .data
         )
-        for s in skipped:
-            found.append(
-                Trigger(
-                    "session_skipped",
-                    f"session_skipped:session={s['id']}",
-                    f"sessie van {s['day']} niet uitgevoerd",
+        if last:
+            last_day = date.fromisoformat(str(last[0]["day"])[:10])
+            days_left = (last_day - today).days
+            if days_left <= BLOCK_END_DAYS:
+                found.append(
+                    Trigger(
+                        "block_end",
+                        f"block_end:plan={plan['id']}:last={last_day.isoformat()}",
+                        f"het huidige blok loopt op {last_day} af "
+                        f"(nog {max(days_left, 0)} dagen); tijd voor een volgend blok",
+                    )
                 )
-            )
 
     # --- wekelijkse review ------------------------------------------------
     # Zondag, zodat de nieuwe week met een verse beoordeling begint.

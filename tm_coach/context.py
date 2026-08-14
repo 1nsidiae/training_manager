@@ -19,6 +19,33 @@ from tm_sync import compliance
 RECENT_DAYS = 21
 RECENT_WEEKS = 10
 
+# Beide vensters zijn ruim, en dat is een keuze. Deze atleet komt terug na een
+# blessure: in de laatste 90 dagen staat één run, in het laatste jaar 23. Een
+# krap venster levert dan niets op, en niets is hier slechter dan oud — want
+# beide grootheden verouderen traag. Op welke weekdagen iemand loopt hangt aan
+# werk en gezin, niet aan vorm. De verhouding tussen hartslag en tempo verschuift
+# wel met vorm, en daarom draagt de kromme haar eigen leeftijd mee.
+HABIT_DAYS = 365
+HABIT_MIN_RUNS = 10
+
+CURVE_DAYS = 365
+CURVE_BUCKET_BPM = 10
+CURVE_MIN_PER_BUCKET = 2
+
+# Boven deze leeftijd beschrijft de kromme een lijf van toen. Bruikbaar om de
+# duur van een sessie te schatten, niet om er een tempodoel op te bouwen.
+CURVE_STALE_DAYS = 60
+
+WEEKDAY_NAMES = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
+
 
 def _one(sb: Client, table: str, columns: str = "*", **filters: Any) -> dict | None:
     q = sb.table(table).select(columns)
@@ -28,7 +55,130 @@ def _one(sb: Client, table: str, columns: str = "*", **filters: Any) -> dict | N
     return rows[0] if rows else None
 
 
-def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[str, Any]:
+def _habitual_days(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Op welke dagen loopt hij werkelijk?
+
+    Een schema dat op vrijdag een tempoloop zet terwijl hij in negentig dagen
+    twee keer op vrijdag liep, wordt niet gevolgd — en een schema dat niet
+    gevolgd wordt, bewaakt niets meer. Dit is een waarneming, geen voorkeur die
+    hij ergens heeft ingevuld, dus het model krijgt de cijfers erbij en mag
+    ervan afwijken als het dat uitlegt.
+    """
+    counts = dict.fromkeys(WEEKDAY_NAMES, 0)
+    for run in runs:
+        day = str(run.get("start_time_local") or "")[:10]
+        try:
+            counts[WEEKDAY_NAMES[date.fromisoformat(day).weekday()]] += 1
+        except ValueError:
+            continue
+
+    total = sum(counts.values())
+    if total < HABIT_MIN_RUNS:
+        return None
+
+    ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    return {
+        "window_days": HABIT_DAYS,
+        "runs": total,
+        "share_by_day": {day: round(n / total, 3) for day, n in ranked},
+        # Gemeten tegen een gelijke verdeling over de week: een dag is een
+        # gewoonte als hij minstens zijn deel krijgt, en zeldzaam als hij nog
+        # niet de helft daarvan haalt. Relatief, zodat de grens niet verschuift
+        # met het aantal runs in het venster.
+        "habitual": [day for day, n in ranked if n / total >= 1.0 / 7.0],
+        "rare": [day for day, n in ranked if n / total < 0.5 / 7.0],
+    }
+
+
+def _hr_pace_curve(runs: list[dict[str, Any]], today: date) -> dict[str, Any] | None:
+    """Wat kost een hartslag hem aan tempo?
+
+    Hiermee weet het model wat een voorschrift in de praktijk betekent: "10 km
+    rustig onder 141" is bij deze loper ruim een uur, niet de 55 minuten die je
+    zou aannemen uit zijn 5 km-tijd. Zonder deze kromme schat het schema de
+    duur van elke rustige sessie structureel te kort in.
+
+    De vorm zegt zelf ook iets: ligt er weinig tempoverschil tussen een lage en
+    een hoge hartslag, dan is de aerobe basis dun en is juist volume het middel.
+    """
+    buckets: dict[int, list[float]] = {}
+    newest: date | None = None
+    for run in runs:
+        hr = run.get("avg_hr")
+        distance = float(run.get("distance_m") or 0)
+        duration = float(run.get("duration_s") or 0)
+        if not hr or distance < 2000 or duration <= 0:
+            continue
+        pace = duration / (distance / 1000.0)
+        if not (180 <= pace <= 600):  # 3:00 tot 10:00 per km
+            continue
+        buckets.setdefault(int(float(hr) // CURVE_BUCKET_BPM) * CURVE_BUCKET_BPM, []).append(pace)
+        try:
+            day = date.fromisoformat(str(run.get("start_time_local") or "")[:10])
+        except ValueError:
+            continue
+        newest = max(newest, day) if newest else day
+
+    points = []
+    for low, paces in sorted(buckets.items()):
+        if len(paces) < CURVE_MIN_PER_BUCKET:
+            continue
+        paces.sort()
+        median = paces[len(paces) // 2]
+        points.append(
+            {
+                "hr_from": low,
+                "hr_to": low + CURVE_BUCKET_BPM - 1,
+                "median_pace_s_per_km": round(median),
+                "runs": len(paces),
+            }
+        )
+
+    if len(points) < 3:
+        return None
+
+    slowest, fastest = points[0], points[-1]
+    span_bpm = fastest["hr_from"] - slowest["hr_from"]
+    span_pace = slowest["median_pace_s_per_km"] - fastest["median_pace_s_per_km"]
+    age_days = (today - newest).days if newest else None
+    stale = age_days is not None and age_days > CURVE_STALE_DAYS
+    return {
+        "window_days": CURVE_DAYS,
+        "points": points,
+        "s_per_km_per_10bpm": round(span_pace / (span_bpm / 10.0), 1) if span_bpm else None,
+        "newest_run": newest.isoformat() if newest else None,
+        "age_days": age_days,
+        "stale": stale,
+        "lowest_measured_hr": slowest["hr_from"],
+        "note": (
+            "Gemeten uit zijn eigen runs: mediaan tempo per hartslagbucket. Gebruik "
+            "dit om de duur van een voorgeschreven sessie realistisch in te schatten "
+            "en om te controleren of een tempodoel bij het HR-plafond past. Een vlakke "
+            "kromme betekent dat harder lopen weinig tempo oplevert; dat is een reden "
+            "voor volume, niet voor intensiteit. Extrapoleer NIET onder "
+            f"lowest_measured_hr ({slowest['hr_from']}): daar is niet gemeten. Ligt het "
+            "easy-plafond onder die grens, dan is dat zelf de bevinding — hij heeft "
+            "in dit venster nooit echt rustig gelopen, en het eerste doel van het "
+            "schema is dat wél laten gebeuren."
+            + (
+                " LET OP: stale is waar. Deze kromme beschrijft een eerdere vorm en "
+                "is bijna zeker te optimistisch. Gebruik hem als bovengrens bij het "
+                "schatten van duur — reken dus op trager — en nooit als tempobron; "
+                "daarvoor blijft fitness.anchor de enige bron."
+                if stale
+                else ""
+            )
+        ),
+    }
+
+
+def build_context(
+    sb: Client,
+    goal: dict[str, Any],
+    weeks_to_plan: int,
+    *,
+    freeze_until: date | None = None,
+) -> dict[str, Any]:
     today = clock.today()
 
     profile = _one(sb, "athlete_profile") or {}
@@ -201,6 +351,29 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
     if last_run:
         days_since_run = (today - date.fromisoformat(str(last_run[0]["start_time_local"])[:10])).days
 
+    # Langer venster dan de rest van de context, en bewust alleen hardlopen:
+    # hier gaat het om ritme en om de eigen hartslag-tempoverhouding, en die
+    # zijn pas betrouwbaar over maanden.
+    long_runs = (
+        sb.table("activities")
+        .select("start_time_local, distance_m, duration_s, avg_hr")
+        .eq("sport", "running")
+        .gte("start_time_local", (today - timedelta(days=CURVE_DAYS)).isoformat())
+        .order("start_time_local", desc=True)
+        .execute()
+        .data
+    )
+    habit_cutoff = (today - timedelta(days=HABIT_DAYS)).isoformat()
+    habitual_days = _habitual_days(
+        [r for r in long_runs if str(r.get("start_time_local") or "")[:10] >= habit_cutoff]
+    )
+    if habitual_days:
+        habitual_days["note"] = (
+            "Geteld uit zijn eigen activiteiten, niet ingevuld. Een weekritme hangt "
+            "aan werk en gezin en veroudert traag, dus dit venster is bewust ruim."
+        )
+    hr_pace_curve = _hr_pace_curve(long_runs, today)
+
     params = goal.get("params") or {}
 
     def requested_date(key: str, fallback: date) -> date:
@@ -211,6 +384,13 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         return max(value, fallback)
 
     plan_start = requested_date("plan_start_date", today)
+
+    # De toezeggingshorizon: wat al op het horloge staat voor deze week blijft
+    # staan. Een schema dat woensdag zijn eigen donderdag omgooit is geen plan
+    # maar een suggestie, en dan valt er niets meer te volgen of te meten.
+    if freeze_until and freeze_until >= plan_start:
+        plan_start = freeze_until + timedelta(days=1)
+
     first_training_date = (
         requested_date("first_training_date", plan_start)
         if params.get("first_training_date")
@@ -228,6 +408,7 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         .data
     )
     active_next_7d: list[dict[str, Any]] = []
+    frozen_sessions: list[dict[str, Any]] = []
     if active_plan_rows:
         active_next_7d = (
             sb.table("plan_sessions")
@@ -243,6 +424,12 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
             .execute()
             .data
         )
+        if freeze_until:
+            frozen_sessions = [
+                session
+                for session in active_next_7d
+                if str(session["day"]) <= freeze_until.isoformat()
+            ]
 
     # Voorgerekende grenzen. Het model is de coach, niet de rekenmachine: laat
     # het afleiden welke week de referentie is en het rekent er een keer naast,
@@ -304,6 +491,51 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         else None
     )
 
+    # De pijnregel stond actief in coach_rules maar werd nergens afgedwongen:
+    # het model kreeg de drempel te zien en niets controleerde of het plan zich
+    # eraan hield. Deze twee velden maken haar toetsbaar.
+    pain_threshold = float(
+        (rules_by_key.get("pain_score_override", {}).get("params") or {}).get(
+            "pain_threshold", 6
+        )
+    )
+    pain_signal = None
+    for row in feedback:
+        score = float(row.get("pain_score") or 0)
+        if score < pain_threshold:
+            continue
+        signal_day = date.fromisoformat(str(row["created_at"])[:10])
+        rest_until = signal_day + timedelta(days=3)
+        if rest_until < today:
+            break
+        pain_signal = {
+            "day": signal_day.isoformat(),
+            "pain_score": score,
+            "threshold": pain_threshold,
+            "no_intensity_until": rest_until.isoformat(),
+        }
+        break
+
+    readiness_min = float(
+        (rules_by_key.get("readiness_gate_quality", {}).get("params") or {}).get(
+            "min_readiness", 50
+        )
+    )
+    today_readiness = next(
+        (
+            float(w["training_readiness_score"])
+            for w in wellness
+            if str(w["day"]) == today.isoformat()
+            and w.get("training_readiness_score") is not None
+        ),
+        None,
+    )
+    low_readiness_today = (
+        {"score": today_readiness, "threshold": readiness_min}
+        if today_readiness is not None and today_readiness < readiness_min
+        else None
+    )
+
     constraints = {
         "runs_last_21d": runs_last_21d,
         "reference_week": reference["week_start"] if reference else None,
@@ -340,6 +572,9 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
         ],
         "current_plan_next_7d_distance_m": current_next_7d_distance_m,
         "target_miss_next_7d_ceiling_m": repeated_reduction_ceiling_m,
+        "pain_signal": pain_signal,
+        "low_readiness_today": low_readiness_today,
+        "habitual_training_days": habitual_days,
         "note": (
             "entry_week_ceiling_m is het plafond voor de EERSTE geplande week en komt "
             "uit de aangetoonde capaciteit, niet uit het recente weekvolume: de "
@@ -352,7 +587,11 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
             "met aaneengesloten rustige runs. De HR-bovengrens en de pijnregel blijven "
             "onverkort gelden. Bij te weinig slaap is "
             "sleep_volume_ceiling_next_7d_m het maximum voor de KOMENDE ZEVEN DAGEN; "
-            "dat bevriest het huidige niveau en is geen terugval naar beginnersvolume."
+            "dat bevriest het huidige niveau en is geen terugval naar beginnersvolume. "
+            "pain_signal en low_readiness_today zijn deterministisch vastgesteld en "
+            "worden na jou opnieuw gecontroleerd; ga er niet overheen. "
+            "habitual_training_days is waargenomen gedrag, geen opgegeven voorkeur: "
+            "plan op de dagen waarop hij werkelijk loopt, tenzij je uitlegt waarom niet."
         ),
     }
 
@@ -363,6 +602,16 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
             "plan_start_date": plan_start.isoformat(),
             "first_training_date": first_training_date.isoformat() if first_training_date else None,
             "weeks": weeks_to_plan,
+            "frozen_until": freeze_until.isoformat() if freeze_until else None,
+            "frozen_sessions": frozen_sessions,
+            "freeze_note": (
+                "frozen_sessions staan al vast en worden ongewijzigd overgenomen. "
+                "Plan er GEEN sessie op of vóór frozen_until: die dagen zijn niet "
+                "van jou. Gebruik ze wel om je eerste week erop te laten aansluiten, "
+                "bijvoorbeeld door geen tweede lange duurloop vlak erna te zetten."
+            )
+            if freeze_until
+            else None,
         },
         "athlete": {
             "max_hr": profile.get("max_hr"),
@@ -393,8 +642,11 @@ def build_context(sb: Client, goal: dict[str, Any], weeks_to_plan: int) -> dict[
             "current": estimates.get("current"),
             "historical": estimates.get("historical"),
             "garmin_predictions": predictions[0] if predictions else None,
+            "hr_pace_curve": hr_pace_curve,
             "note": (
-                "anchor is de enige schatting waarop je een tempodoel mag baseren. "
+                "hr_pace_curve is gemeten aan zijn eigen runs en zegt wat een "
+            "hartslagvoorschrift in de praktijk aan tempo en dus aan tijd kost. "
+            "anchor is de enige schatting waarop je een tempodoel mag baseren. "
                 "Hij kiest zelf de beste bron en verantwoordt dat in basis: source, "
                 "evidence_date, evidence_age_days en confidence. Bij confidence "
                 "'low' of 'medium' geef je een ruime tempoband en benoem je de "
