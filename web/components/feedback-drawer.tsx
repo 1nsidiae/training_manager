@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -47,11 +48,9 @@ export function FeedbackDrawer({
   const [endurance, setEndurance] = React.useState(feedback?.endurance_score ?? 6);
   const [notes, setNotes] = React.useState(feedback?.notes ?? "");
   const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
 
   async function saveFeedback() {
     setSaving(true);
-    setError(null);
     const sb = createClient();
     const feeling = FEELINGS.find((option) => option.value === endurance)?.code ?? "normal";
     const planSessionId = feedback?.plan_session_id ?? session?.id ?? null;
@@ -69,7 +68,10 @@ export function FeedbackDrawer({
       : await sb.from("session_feedback").insert(payload);
 
     if (feedbackResult.error) {
-      setError("Opslaan lukte niet. Controleer je verbinding en probeer opnieuw.");
+      toast.error("Feedback niet opgeslagen", {
+        description: "Controleer je verbinding en probeer opnieuw.",
+        duration: 6500,
+      });
       setSaving(false);
       return;
     }
@@ -80,7 +82,10 @@ export function FeedbackDrawer({
         .update({ status: "completed", activity_id: activity.id })
         .eq("id", planSessionId);
       if (sessionError) {
-        setError("Feedback is opgeslagen, maar de geplande training kon niet worden gekoppeld.");
+        toast.warning("Feedback opgeslagen zonder koppeling", {
+          description: "De geplande training kon niet aan deze activiteit worden gekoppeld.",
+          duration: 6500,
+        });
         setSaving(false);
         router.refresh();
         return;
@@ -89,6 +94,9 @@ export function FeedbackDrawer({
 
     setSaving(false);
     setOpen(false);
+    toast.success(feedback ? "Feedback bijgewerkt" : "Feedback opgeslagen", {
+      description: "Je coach neemt dit mee in je volgende aanpassing.",
+    });
     router.refresh();
   }
 
@@ -184,12 +192,6 @@ export function FeedbackDrawer({
               placeholder="Bijvoorbeeld: linkerkuit voelde stijf na 20 minuten…"
             />
           </div>
-
-          {error ? (
-            <p className="mt-3 text-[11px] leading-relaxed text-danger" role="alert">
-              {error}
-            </p>
-          ) : null}
 
           <Button className="mt-5 w-full" onClick={saveFeedback} disabled={saving}>
             {saving ? <LoaderCircle className="animate-spin" /> : <Check />}

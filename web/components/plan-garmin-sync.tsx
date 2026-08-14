@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Plan, PlanSession, PlanSyncLog } from "@/lib/queries";
 
@@ -94,6 +95,16 @@ export function PlanGarminSync({
         setState(data.status);
         setDetail(data.error ?? null);
         setRequestId(null);
+        if (data.status === "ok") {
+          toast.success("Garmin-planning bijgewerkt", {
+            description: "Je toekomstige loopsessies zijn opnieuw gesynchroniseerd.",
+          });
+        } else {
+          toast.error("Garmin-planning niet volledig bijgewerkt", {
+            description: data.error ?? "Bekijk de Garmin-status voor de resterende actie.",
+            duration: 6500,
+          });
+        }
         router.refresh();
         return;
       }
@@ -102,6 +113,10 @@ export function PlanGarminSync({
         setState("error");
         setDetail("De Garmin-taak staat klaar, maar de worker reageert nog niet.");
         setRequestId(null);
+        toast.warning("Garmin-update wacht", {
+          description: "De taak wordt verwerkt zodra de worker weer draait.",
+          duration: 6500,
+        });
       }
     }, POLL_MS);
     return () => window.clearInterval(timer);
@@ -136,10 +151,17 @@ export function PlanGarminSync({
       }
       setState("error");
       setDetail("Er loopt nog een andere Garmin-taak. Probeer opnieuw zodra die klaar is.");
+      toast.warning("Andere Garmin-taak is bezig", {
+        description: "Probeer opnieuw zodra die taak klaar is.",
+      });
       return;
     }
     setState("error");
     setDetail("De Garmin-update kon niet worden aangevraagd.");
+    toast.error("Garmin-update niet gestart", {
+      description: "De aanvraag kon niet worden opgeslagen. Probeer opnieuw.",
+      duration: 6500,
+    });
   }
 
   async function restorePrevious() {
@@ -154,6 +176,10 @@ export function PlanGarminSync({
       .eq("status", "active");
     if (demoteError) {
       setDetail("Het huidige plan kon niet veilig worden bewaard.");
+      toast.error("Vorig plan niet hersteld", {
+        description: "Het huidige plan kon niet veilig worden bewaard.",
+        duration: 6500,
+      });
       setRestoring(false);
       return;
     }
@@ -165,6 +191,10 @@ export function PlanGarminSync({
     if (restoreError) {
       await sb.from("plans").update({ status: "active" }).eq("id", plan.id);
       setDetail("Het vorige plan kon niet worden hersteld. Het huidige blijft actief.");
+      toast.error("Vorig plan niet hersteld", {
+        description: "Je huidige plan blijft actief.",
+        duration: 6500,
+      });
       setRestoring(false);
       return;
     }
@@ -182,6 +212,9 @@ export function PlanGarminSync({
       status: "requested",
     });
     setRestoring(false);
+    toast.success("Vorig plan hersteld", {
+      description: "De bijbehorende Garmin-update staat in de wachtrij.",
+    });
     router.refresh();
   }
 

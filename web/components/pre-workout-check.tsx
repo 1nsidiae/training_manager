@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "@/components/ui/sonner";
 import { DetailDrawer } from "@/components/detail-drawer";
 import { createClient } from "@/lib/supabase/client";
 import type { PlanSession } from "@/lib/queries";
@@ -110,7 +111,6 @@ export function PreWorkoutCheckCard({
   const jobType = `preworkout_review:${session.id}:${check.decision}`;
   const [state, setState] = React.useState<ReviewState>("idle");
   const [requestId, setRequestId] = React.useState<number | null>(null);
-  const [detail, setDetail] = React.useState<string | null>(null);
   const busy = state === "requested" || state === "running";
 
   React.useEffect(() => {
@@ -153,6 +153,9 @@ export function PreWorkoutCheckCard({
         clearInterval(timer);
         setRequestId(null);
         setState("done");
+        toast.success("Coachreview afgerond", {
+          description: "Je trainingsadvies en planning zijn opnieuw beoordeeld.",
+        });
         router.refresh();
         return;
       }
@@ -160,14 +163,20 @@ export function PreWorkoutCheckCard({
         clearInterval(timer);
         setRequestId(null);
         setState("error");
-        setDetail(data.error ?? "De coachreview kon niet worden afgerond.");
+        toast.error("Coachreview niet afgerond", {
+          description: data.error ?? "Probeer het later opnieuw.",
+          duration: 6500,
+        });
         return;
       }
       if (Date.now() - startedAt > WORKER_TIMEOUT_MS) {
         clearInterval(timer);
         setRequestId(null);
         setState("no_worker");
-        setDetail("De aanvraag staat klaar. De coachworker heeft ze nog niet opgepakt.");
+        toast.warning("Coachreview wacht", {
+          description: "De aanvraag wordt verwerkt zodra de coachworker draait.",
+          duration: 6500,
+        });
       }
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -176,7 +185,6 @@ export function PreWorkoutCheckCard({
   async function requestReview() {
     if (busy || check.decision === "go") return;
     setState("requested");
-    setDetail(null);
     const sb = createClient();
     const { data, error } = await sb
       .from("sync_log")
@@ -198,9 +206,15 @@ export function PreWorkoutCheckCard({
           setRequestId(existing.id);
           return;
         }
-        setDetail("Er loopt al een andere Garmin- of coachtaak. Probeer daarna opnieuw.");
+        toast.warning("Coachreview niet gestart", {
+          description: "Er loopt al een andere Garmin- of coachtaak. Probeer daarna opnieuw.",
+          duration: 6500,
+        });
       } else {
-        setDetail("De reviewaanvraag kon niet worden opgeslagen.");
+        toast.error("Coachreview niet gestart", {
+          description: "De aanvraag kon niet worden opgeslagen. Probeer opnieuw.",
+          duration: 6500,
+        });
       }
       setState("error");
       return;
@@ -319,7 +333,6 @@ export function PreWorkoutCheckCard({
               </p>
             </div>
           )}
-          {detail ? <p className="mt-2 text-center text-[10px] leading-relaxed text-danger">{detail}</p> : null}
         </div>
       </div>
     </DetailDrawer>

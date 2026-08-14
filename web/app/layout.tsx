@@ -4,6 +4,7 @@ import "@fontsource/barlow/600.css";
 import "@fontsource/barlow/700.css";
 import "leaflet/dist/leaflet.css";
 import { PwaRegister } from "@/components/pwa-register";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -40,6 +41,7 @@ export default function RootLayout({
     <html lang="nl">
       <body className="font-sans">
         {children}
+        <Toaster />
         <PwaRegister />
       </body>
     </html>

@@ -19,6 +19,7 @@ import {
   DrawerDescription,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { PlanChange } from "@/lib/plan-comparison";
 import type { Adjustment, Plan, PlanSession } from "@/lib/queries";
@@ -56,7 +57,6 @@ export function PlanApproval({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState<"approve" | "reject" | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
   const futureRuns = sessions.filter(
     (session) =>
       session.sport === "running" &&
@@ -75,9 +75,16 @@ export function PlanApproval({
     });
   }
 
+  function reportFailure(message: string) {
+    toast.error("Plan niet aangepast", {
+      description: message,
+      duration: 6500,
+    });
+    setBusy(null);
+  }
+
   async function approve() {
     setBusy("approve");
-    setError(null);
     const sb = createClient();
 
     // Een voorstel van de doelwizard wijst naar een nieuw, nog gearchiveerd
@@ -113,8 +120,7 @@ export function PlanApproval({
           .eq("id", previousGoalId)
           .eq("status", "active");
         if (archiveGoalError) {
-          setError("Je huidige doel kon niet veilig worden bewaard. Probeer opnieuw.");
-          setBusy(null);
+          reportFailure("Je huidige doel kon niet veilig worden bewaard. Probeer opnieuw.");
           return;
         }
       }
@@ -127,8 +133,7 @@ export function PlanApproval({
         if (previousGoalId !== null) {
           await sb.from("goals").update({ status: "active" }).eq("id", previousGoalId);
         }
-        setError("Het nieuwe trainingsdoel kon niet worden geactiveerd. Je oude doel blijft actief.");
-        setBusy(null);
+        reportFailure("Het nieuwe trainingsdoel kon niet worden geactiveerd. Je oude doel blijft actief.");
         return;
       }
     }
@@ -141,8 +146,7 @@ export function PlanApproval({
         .eq("status", "active");
       if (demoteError) {
         await restoreGoal();
-        setError("Je huidige plan kon niet veilig worden bewaard. Probeer opnieuw.");
-        setBusy(null);
+        reportFailure("Je huidige plan kon niet veilig worden bewaard. Probeer opnieuw.");
         return;
       }
     }
@@ -157,8 +161,7 @@ export function PlanApproval({
         await sb.from("plans").update({ status: "active" }).eq("id", currentPlan.id);
       }
       await restoreGoal();
-      setError("Het nieuwe plan kon niet worden toegepast. Je oude plan blijft actief.");
-      setBusy(null);
+      reportFailure("Het nieuwe plan kon niet worden toegepast. Je oude plan blijft actief.");
       return;
     }
 
@@ -176,25 +179,31 @@ export function PlanApproval({
 
     setOpen(false);
     setBusy(null);
+    toast.success("Nieuw trainingsplan actief", {
+      description: jobError && jobError.code !== "23505"
+        ? "Het plan is toegepast. De Garmin-update wacht nog op een nieuwe poging."
+        : "De toekomstige trainingen worden nu met Garmin gesynchroniseerd.",
+    });
     router.refresh();
   }
 
   async function keepOriginal() {
     setBusy("reject");
-    setError(null);
     const { error: updateError } = await createClient()
       .from("plans")
       .update({ status: "superseded" })
       .eq("id", plan.id)
       .eq("status", "proposed");
     if (updateError) {
-      setError("Je keuze kon niet worden opgeslagen. Probeer opnieuw.");
-      setBusy(null);
+      reportFailure("Je keuze kon niet worden opgeslagen. Probeer opnieuw.");
       return;
     }
     await recordDecision("kept_original");
     setOpen(false);
     setBusy(null);
+    toast.info("Origineel plan behouden", {
+      description: "Het voorgestelde plan is niet toegepast.",
+    });
     router.refresh();
   }
 
@@ -242,8 +251,6 @@ export function PlanApproval({
             ))}
           </div>
         ) : null}
-
-        {error ? <p className="px-4 pt-3 text-[11px] text-danger" role="alert">{error}</p> : null}
 
         <div className="grid grid-cols-[1fr_1.25fr] gap-2 p-3">
           <Button variant="secondary" onClick={() => setOpen(true)} disabled={busy !== null}>
@@ -334,8 +341,6 @@ export function PlanApproval({
                 Na toepassen wordt het plan actief en worden {futureRuns} toekomstige loopsessies in één gecontroleerde taak naar Garmin gestuurd.
               </p>
             </div>
-
-            {error ? <p className="mt-3 text-[11px] text-danger" role="alert">{error}</p> : null}
 
             <div className="mt-5 grid grid-cols-2 gap-2">
               <Button variant="secondary" onClick={keepOriginal} disabled={busy !== null}>

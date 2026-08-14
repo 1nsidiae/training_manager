@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { sendCoachMessage } from "@/app/(app)/coach/actions";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -51,9 +52,7 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
   const [draft, setDraft] = React.useState("");
   const [open, setOpen] = React.useState(false);
   const [sending, setSending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [reviewStates, setReviewStates] = React.useState<Record<number, ReviewState>>({});
-  const [reviewErrors, setReviewErrors] = React.useState<Record<number, string>>({});
   const listRef = React.useRef<HTMLDivElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
   const reviewPolls = React.useRef(new Set<number>());
@@ -80,7 +79,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
     const content = draft.trim();
     if (!content || sending) return;
     setSending(true);
-    setError(null);
     const formData = new FormData();
     formData.set("message", content);
     const result = await sendCoachMessage(formData);
@@ -94,7 +92,12 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
       });
       setDraft("");
     }
-    setError(result.error);
+    if (result.error) {
+      toast.error("Bericht niet verstuurd", {
+        description: result.error,
+        duration: 6500,
+      });
+    }
     setSending(false);
     scrollToLatest();
   }
@@ -120,16 +123,19 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
         window.clearInterval(timer);
         reviewPolls.current.delete(requestId);
         setReviewStates((current) => ({ ...current, [messageId]: "done" }));
+        toast.success("Planreview klaar", {
+          description: "Je kunt het voorstel nu op de planpagina bekijken.",
+        });
         return;
       }
       if (data.status === "error" || Date.now() - started > REVIEW_TIMEOUT_MS) {
         window.clearInterval(timer);
         reviewPolls.current.delete(requestId);
         setReviewStates((current) => ({ ...current, [messageId]: "error" }));
-        setReviewErrors((current) => ({
-          ...current,
-          [messageId]: data.error ?? "De planreview duurt abnormaal lang. De worker moet worden gecontroleerd.",
-        }));
+        toast.error("Planreview niet afgerond", {
+          description: data.error ?? "De review duurt abnormaal lang. Controleer de coachworker.",
+          duration: 6500,
+        });
         return;
       }
       if (data.status === "running") {
@@ -162,7 +168,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
             ...current,
             [messageId]: reviewStateFromJob(job.status),
           }));
-          if (job.error) setReviewErrors((current) => ({ ...current, [messageId]: job.error }));
           if (job.status === "requested" || job.status === "running") {
             void pollReview(messageId, job.id);
           }
@@ -178,7 +183,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
   async function requestPlanReview(messageId: number) {
     const job = `coach_chat_review:${messageId}`;
     setReviewStates((current) => ({ ...current, [messageId]: "requested" }));
-    setReviewErrors((current) => ({ ...current, [messageId]: "" }));
     const sb = createClient();
     const { data, error: insertError } = await sb
       .from("sync_log")
@@ -201,10 +205,10 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
         }
       }
       setReviewStates((current) => ({ ...current, [messageId]: "error" }));
-      setReviewErrors((current) => ({
-        ...current,
-        [messageId]: "Er loopt al een andere Garmin- of coachtaak. Probeer daarna opnieuw.",
-      }));
+      toast.warning("Planreview niet gestart", {
+        description: "Er loopt al een andere Garmin- of coachtaak. Probeer daarna opnieuw.",
+        duration: 6500,
+      });
       return;
     }
     void pollReview(messageId, data.id);
@@ -350,9 +354,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
                               De aanvraag is bewaard maar de coachworker heeft ze nog niet opgepakt.
                             </p>
                           ) : null}
-                          {reviewErrors[message.id] ? (
-                            <p className="mt-2 text-[10px] leading-relaxed text-danger">{reviewErrors[message.id]}</p>
-                          ) : null}
                         </div>
                       ) : null}
 
@@ -405,7 +406,6 @@ export function CoachChat({ initialMessages }: { initialMessages: CoachMessage[]
                   {sending ? <LoaderCircle className="animate-spin" /> : <SendHorizontal />}
                 </Button>
               </form>
-              {error ? <p className="mt-2 text-[10px] leading-relaxed text-danger">{error}</p> : null}
               <p className="mt-1.5 text-center text-[9px] text-faint">
                 Trainingsadvies · geen medische diagnose
               </p>

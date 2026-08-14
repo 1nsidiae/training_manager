@@ -6,6 +6,7 @@ import { AlertCircle, Check, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 
 const WORKER_TIMEOUT_MS = 45_000;
@@ -87,6 +88,9 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt?: string | null }) {
         setRequestId(null);
         setState("done");
         setDetail(`${data.items_synced ?? 0} records bijgewerkt`);
+        toast.success("Garmin-gegevens bijgewerkt", {
+          description: `${data.items_synced ?? 0} records gesynchroniseerd.`,
+        });
         router.refresh();
         window.setTimeout(() => setState("idle"), 4_000);
         return;
@@ -96,12 +100,20 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt?: string | null }) {
         setRequestId(null);
         setState("error");
         setDetail(data.error ?? null);
+        toast.error("Garmin-sync mislukt", {
+          description: data.error ?? "Open de syncstatus voor meer informatie.",
+          duration: 6500,
+        });
         return;
       }
       if (Date.now() - startedAt > WORKER_TIMEOUT_MS) {
         window.clearInterval(timer);
         setRequestId(null);
         setState("no_worker");
+        toast.warning("Garmin-sync wacht", {
+          description: "De aanvraag wordt verwerkt zodra de worker weer draait.",
+          duration: 6500,
+        });
       }
     }, POLL_MS);
     return () => window.clearInterval(timer);
@@ -139,10 +151,17 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt?: string | null }) {
       }
       setState("error");
       setDetail("Wacht tot de andere Garmin-taak klaar is en probeer opnieuw.");
+      toast.warning("Andere Garmin-taak is bezig", {
+        description: "Probeer opnieuw zodra die taak klaar is.",
+      });
       return;
     }
     setState("error");
     setDetail("De sync kon niet worden aangevraagd.");
+    toast.error("Garmin-sync niet gestart", {
+      description: "De aanvraag kon niet worden opgeslagen. Probeer opnieuw.",
+      duration: 6500,
+    });
   }
 
   return (

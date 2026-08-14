@@ -13,6 +13,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 import { SESSION_META, duration, km } from "@/lib/format";
 import type { PlanSession } from "@/lib/queries";
@@ -54,7 +55,6 @@ export function SessionActions({
   const [mode, setMode] = React.useState<"menu" | "move">("menu");
   const [date, setDate] = React.useState<Date | undefined>(sessionDate);
   const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const scheduledByDay = React.useMemo(() => {
     const grouped = new Map<string, PlanSession[]>();
     for (const item of planSessions) {
@@ -77,7 +77,6 @@ export function SessionActions({
 
   async function updateSession(values: { status: string; day?: string }) {
     setSaving(true);
-    setError(null);
     const sb = createClient();
     const movedOnGarmin =
       Boolean(session.garmin_workout_id) && Boolean(values.day) && values.day !== session.day;
@@ -109,7 +108,10 @@ export function SessionActions({
       .eq("id", session.id);
 
     if (updateError) {
-      setError("De training kon niet worden bijgewerkt. Probeer opnieuw.");
+      toast.error("Training niet bijgewerkt", {
+        description: "Controleer je verbinding en probeer opnieuw.",
+        duration: 6500,
+      });
       setSaving(false);
       return;
     }
@@ -131,13 +133,17 @@ export function SessionActions({
             setSaving(false);
             setOpen(false);
             setMode("menu");
+            toast.info("Training bijgewerkt", {
+              description: "De bijbehorende Garmin-update staat al in de wachtrij.",
+            });
             router.refresh();
             return;
           }
         }
-        setError(
-          "De planning is in de app aangepast, maar Garmin wacht nog. Probeer opnieuw zodra de andere Garmin-taak klaar is.",
-        );
+        toast.warning("Planning bijgewerkt, Garmin wacht", {
+          description: "Probeer de Garmin-update opnieuw zodra de andere taak klaar is.",
+          duration: 6500,
+        });
         setSaving(false);
         return;
       }
@@ -146,6 +152,19 @@ export function SessionActions({
     setSaving(false);
     setOpen(false);
     setMode("menu");
+    const moved = Boolean(values.day) && values.day !== session.day;
+    toast.success(
+      values.status === "skipped"
+        ? "Training overgeslagen"
+        : moved
+          ? "Training verplaatst"
+          : session.status === "skipped"
+            ? "Training opnieuw ingepland"
+            : "Training bijgewerkt",
+      moved && values.day
+        ? { description: `Nieuwe datum: ${formatMoveDate(new Date(`${values.day}T12:00:00`), true)}.` }
+        : undefined,
+    );
     router.refresh();
   }
 
@@ -404,7 +423,6 @@ export function SessionActions({
             </div>
           )}
 
-          {error ? <p className="mt-3 text-[11px] text-danger" role="alert">{error}</p> : null}
         </div>
       </DrawerContent>
     </Drawer>

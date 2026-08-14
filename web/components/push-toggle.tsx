@@ -5,6 +5,7 @@ import { Bell, BellOff, LoaderCircle, Smartphone, TriangleAlert } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -55,7 +56,6 @@ function iosZonderInstallatie(): boolean {
 
 export function PushToggle() {
   const [state, setState] = React.useState<State>("laden");
-  const [melding, setMelding] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     async function bepaalStand() {
@@ -85,7 +85,6 @@ export function PushToggle() {
 
   async function aanzetten() {
     setState("bezig");
-    setMelding(null);
     try {
       if (!VAPID_PUBLIC_KEY) {
         throw new Error("NEXT_PUBLIC_VAPID_PUBLIC_KEY ontbreekt in de webomgeving.");
@@ -124,16 +123,20 @@ export function PushToggle() {
       if (error) throw new Error(error.message);
 
       setState("aan");
-      setMelding("Dit toestel krijgt vanaf nu meldingen.");
+      toast.success("Pushmeldingen staan aan", {
+        description: "Dit toestel krijgt vanaf nu trainings- en planmeldingen.",
+      });
     } catch (exc) {
       setState("uit");
-      setMelding(exc instanceof Error ? exc.message : "Aanzetten is niet gelukt.");
+      toast.error("Pushmeldingen niet aangezet", {
+        description: exc instanceof Error ? exc.message : "Probeer het opnieuw.",
+        duration: 6500,
+      });
     }
   }
 
   async function uitzetten() {
     setState("bezig");
-    setMelding(null);
     try {
       const registration = await navigator.serviceWorker.ready;
       const abonnement = await registration.pushManager.getSubscription();
@@ -145,21 +148,30 @@ export function PushToggle() {
         await abonnement.unsubscribe();
       }
       setState("uit");
-      setMelding("Dit toestel krijgt geen meldingen meer.");
+      toast.info("Pushmeldingen staan uit", {
+        description: "Dit toestel krijgt geen nieuwe meldingen meer.",
+      });
     } catch (exc) {
       setState("aan");
-      setMelding(exc instanceof Error ? exc.message : "Uitzetten is niet gelukt.");
+      toast.error("Pushmeldingen niet uitgezet", {
+        description: exc instanceof Error ? exc.message : "Probeer het opnieuw.",
+        duration: 6500,
+      });
     }
   }
 
   async function testen() {
-    setMelding(null);
     const { error } = await createClient().rpc("send_test_notification");
-    setMelding(
-      error
-        ? `Testmelding mislukt: ${error.message}`
-        : "Testmelding verstuurd. Hij komt binnen enkele seconden aan.",
-    );
+    if (error) {
+      toast.error("Testmelding niet verstuurd", {
+        description: error.message,
+        duration: 6500,
+      });
+      return;
+    }
+    toast.success("Testmelding verstuurd", {
+      description: "Ze komt normaal binnen enkele seconden aan.",
+    });
   }
 
   const uitleg: Record<State, string> = {
@@ -236,8 +248,6 @@ export function PushToggle() {
           )}
         </div>
       )}
-
-      {melding && <p className="mt-2.5 text-xs leading-relaxed text-muted">{melding}</p>}
     </Card>
   );
 }

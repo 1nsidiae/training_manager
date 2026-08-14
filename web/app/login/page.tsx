@@ -1,14 +1,23 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { Activity, LockKeyhole } from "lucide-react";
 import { login } from "@/app/login/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/sonner";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, { error: null });
+
+  useEffect(() => {
+    if (!state.error) return;
+    toast.error("Inloggen niet gelukt", {
+      description: state.error,
+      duration: 6500,
+    });
+  }, [state.error]);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
@@ -51,16 +60,6 @@ export default function LoginPage() {
             autoComplete="current-password"
             className="mb-5"
           />
-
-          {state.error ? (
-            <p
-              role="alert"
-              aria-live="polite"
-              className="mb-4 rounded-xl border border-danger/40 bg-danger/10 px-3.5 py-3 text-sm text-danger"
-            >
-              {state.error}
-            </p>
-          ) : null}
 
           <Button type="submit" disabled={pending} size="lg" className="w-full">
             {pending ? "Bezig…" : "Inloggen"}

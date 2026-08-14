@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -213,7 +214,6 @@ export function NewPlanWizard({
   const [requestError, setRequestError] = React.useState(initialRequest?.error ?? "");
   const [requestId, setRequestId] = React.useState<number | null>(initialRequest?.id ?? null);
   const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState("");
   const [data, setData] = React.useState<WizardData>(() => {
     const planStartDate = dateToIso(new Date())!;
     return {
@@ -273,7 +273,6 @@ export function NewPlanWizard({
 
   function update(patch: Partial<WizardData>) {
     setData((current) => ({ ...current, ...patch }));
-    setError("");
   }
 
   function currentValidation() {
@@ -305,12 +304,14 @@ export function NewPlanWizard({
 
   function next() {
     const message = currentValidation();
-    if (message) return setError(message);
+    if (message) {
+      toast.warning("Nog een keuze nodig", { description: message });
+      return;
+    }
     setStep((current) => Math.min(current + 1, steps - 1));
   }
 
   function previous() {
-    setError("");
     setStep((current) => Math.max(0, current - 1));
   }
 
@@ -350,7 +351,6 @@ export function NewPlanWizard({
   async function submit() {
     if (!data.goalType) return;
     setSubmitting(true);
-    setError("");
     const result = await requestNewPlan({
       goalType: data.goalType,
       targetDistanceM: needsGoalDetails ? selectedDistance : null,
@@ -371,9 +371,18 @@ export function NewPlanWizard({
       limitations: data.limitations,
     });
     setSubmitting(false);
-    if (!result.ok || !result.requestId) return setError(result.error ?? "De aanvraag kon niet worden gestart.");
+    if (!result.ok || !result.requestId) {
+      toast.error("Planvoorstel niet gestart", {
+        description: result.error ?? "De aanvraag kon niet worden gestart.",
+        duration: 6500,
+      });
+      return;
+    }
     setRequestId(result.requestId);
     setRequestState("requested");
+    toast.info("Coach maakt je planvoorstel", {
+      description: "Je antwoorden zijn bewaard. Dit kan enkele minuten duren.",
+    });
   }
 
   return (
@@ -624,8 +633,6 @@ export function NewPlanWizard({
                   <p className="mt-3 text-[10px] leading-relaxed text-faint">De coach maakt eerst een adaptief blok van vier weken binnen je langetermijndoel. Het voorstel gebruikt Claude Opus en kost doorgaans ongeveer $0,30–$0,60.</p>
                 </section>
               ) : null}
-
-              {error ? <p className="mt-4 rounded-xl border border-danger/25 bg-danger/10 p-3 text-[11px] leading-relaxed text-danger" role="alert">{error}</p> : null}
 
               <div className="mt-6 grid grid-cols-[0.75fr_1.25fr] gap-2">
                 <Button variant="secondary" onClick={previous} disabled={step === 0 || submitting}><ArrowLeft /> Terug</Button>

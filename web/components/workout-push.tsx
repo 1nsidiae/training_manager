@@ -6,6 +6,7 @@ import { AlertCircle, ArrowRightLeft, CalendarCheck, Check, LoaderCircle, Send, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { PlanSession, WorkoutConflict } from "@/lib/queries";
 
@@ -105,6 +106,9 @@ export function WorkoutPush({
         setRequestId(null);
         setDetail(null);
         setState("done");
+        toast.success("Training op Garmin bijgewerkt", {
+          description: `${session.title} staat klaar op de geplande dag.`,
+        });
         router.refresh();
         return;
       }
@@ -113,6 +117,10 @@ export function WorkoutPush({
         setRequestId(null);
         setDetail(data.error ?? "Garmin heeft de workout niet aanvaard.");
         setState("error");
+        toast.error("Training niet naar Garmin gestuurd", {
+          description: data.error ?? "Garmin heeft de workout niet aanvaard.",
+          duration: 6500,
+        });
         router.refresh();
         return;
       }
@@ -121,6 +129,10 @@ export function WorkoutPush({
         setRequestId(null);
         setState("no_worker");
         setDetail("De aanvraag staat klaar, maar de worker reageert nog niet.");
+        toast.warning("Garmin-export wacht", {
+          description: "De aanvraag wordt verwerkt zodra de worker weer draait.",
+          duration: 6500,
+        });
       }
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -152,10 +164,17 @@ export function WorkoutPush({
         }
         setState("error");
         setDetail("Wacht tot de andere Garmin-taak klaar is en probeer opnieuw.");
+        toast.warning("Andere Garmin-taak is bezig", {
+          description: "Probeer deze training opnieuw zodra die taak klaar is.",
+        });
         return;
       }
       setState("error");
       setDetail("De exportaanvraag kon niet worden opgeslagen.");
+      toast.error("Garmin-export niet gestart", {
+        description: "De aanvraag kon niet worden opgeslagen. Probeer opnieuw.",
+        duration: 6500,
+      });
       return;
     }
     setRequestId(data.id);
