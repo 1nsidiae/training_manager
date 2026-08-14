@@ -21,11 +21,9 @@ from supabase import Client
 
 from . import anchor
 from . import clock
+from .training_load import MINIMUM_CHRONIC_LOAD, estimate_activity_load
 
 log = logging.getLogger(__name__)
-
-# Zonegewichten voor de TRIMP-achtige fallback als Garmin geen trainingload geeft.
-ZONE_WEIGHTS = {1: 1.0, 2: 2.0, 3: 3.0, 4: 4.0, 5: 5.0}
 
 RUNNING_SPORTS = {"running"}
 
@@ -39,7 +37,7 @@ DEFAULT_SLEEP_NEED_S = 8 * 3600
 # Onder deze chronische belasting is de ACWR-verhouding betekenisloos: na een
 # rustperiode levert een enkele run al een ratio van 4+ op, en daar mag geen
 # guardrail op ingrijpen. Dan liever expliciet geen waarde.
-MIN_CHRONIC_LOAD = 50.0
+MIN_CHRONIC_LOAD = MINIMUM_CHRONIC_LOAD
 
 
 def _rows(sb: Client, table: str, columns: str = "*") -> list[dict[str, Any]]:
@@ -112,15 +110,9 @@ def compute_daily(sb: Client) -> int:
         for zone, secs in act_zones.items():
             slot[f"zone{zone}_s"] += secs
 
-        raw = a.get("raw") or {}
-        garmin_load = raw.get("activityTrainingLoad")
-        if garmin_load:
-            slot["load"] += float(garmin_load)
-        else:
-            # Fallback: zonegewogen minuten.
-            slot["load"] += sum(
-                (secs / 60.0) * ZONE_WEIGHTS[zone] for zone, secs in act_zones.items()
-            )
+        # Garmin Training Load is de voorkeursbron. Bij ontbrekende Garmin-load
+        # telt elke sport alsnog mee via zones of een zichtbare duurschatting.
+        slot["load"] += estimate_activity_load(a, act_zones)["load"]
 
     rows = list(days.values())
     for i in range(0, len(rows), 200):

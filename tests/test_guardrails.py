@@ -124,6 +124,25 @@ class ReadinessTest(unittest.TestCase):
         self.assertNotIn("readiness_gate_quality", hits)
 
 
+class MultiSportHerstelTest(unittest.TestCase):
+    def test_zware_run_binnen_48_uur_wordt_afgekeurd_bij_protect(self) -> None:
+        plan = _plan(_session("2026-08-15", "tempo", sport="running"))
+        context = _context(multi_sport_load={"heavy_run_impact": "protect"})
+        self.assertIn("multi_sport_recovery_spacing", _rules_hit(plan, context))
+
+    def test_easy_run_en_later_zwaar_lopen_blijven_mogelijk(self) -> None:
+        plan = _plan(
+            _session("2026-08-15", "easy", sport="running"),
+            _session("2026-08-17", "tempo", sport="running"),
+        )
+        context = _context(multi_sport_load={"heavy_run_impact": "protect"})
+        self.assertNotIn("multi_sport_recovery_spacing", _rules_hit(plan, context))
+
+    def test_watch_is_advies_geen_hard_blok(self) -> None:
+        plan = _plan(_session("2026-08-15", "long", sport="running"))
+        context = _context(multi_sport_load={"heavy_run_impact": "watch"})
+        self.assertNotIn("multi_sport_recovery_spacing", _rules_hit(plan, context))
+
 class ToezeggingshorizonTest(unittest.TestCase):
     def test_het_model_mag_de_vastgelegde_week_niet_overschrijven(self) -> None:
         plan = _plan(_session("2026-08-16", "easy"))

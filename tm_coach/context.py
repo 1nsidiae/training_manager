@@ -15,6 +15,7 @@ from supabase import Client
 from tm_sync import clock
 
 from tm_sync import compliance
+from tm_sync.training_load import build_load_summary, estimate_activity_load
 
 RECENT_DAYS = 21
 RECENT_WEEKS = 10
@@ -290,40 +291,71 @@ def build_context(
     # Alle Garmin-sporten blijven coachcontext. Afstanden van zwemmen, fietsen,
     # wandelen enz. zijn niet vergelijkbaar met hardloopkilometers, maar hun
     # duur, hartslagzones en Garmins eigen Training Load zijn wel herstelkosten.
+    load_window_start = today - timedelta(days=27)
     recent_activities_raw = (
         sb.table("activities")
         .select(
-            "sport, sub_sport, name, start_time_local, duration_s, distance_m, "
+            "id, sport, sub_sport, name, start_time_local, duration_s, distance_m, "
             "avg_hr, raw"
         )
         .gte(
             "start_time_local",
-            (today - timedelta(days=RECENT_DAYS)).isoformat(),
+            load_window_start.isoformat(),
         )
         .order("start_time_local", desc=True)
         .execute()
         .data
     )
 
+    activity_ids = [int(activity["id"]) for activity in recent_activities_raw]
+    zones_by_activity: dict[int, dict[int, float]] = {}
+    if activity_ids:
+        zone_rows = (
+            sb.table("activity_zones")
+            .select("activity_id, zone_number, seconds_in_zone")
+            .in_("activity_id", activity_ids)
+            .execute()
+            .data
+        )
+        for zone in zone_rows:
+            zones_by_activity.setdefault(int(zone["activity_id"]), {})[
+                int(zone["zone_number"])
+            ] = float(zone.get("seconds_in_zone") or 0)
+
+    multi_sport_load = build_load_summary(
+        recent_activities_raw,
+        zones_by_activity,
+        today,
+    )
+    recent_cutoff = (today - timedelta(days=RECENT_DAYS)).isoformat()
     activity_mix: dict[str, dict[str, Any]] = {}
     recent_activities: list[dict[str, Any]] = []
     for activity in recent_activities_raw:
-        raw = activity.get("raw") or {}
-        load_value = raw.get("activityTrainingLoad")
-        try:
-            training_load = round(float(load_value), 1) if load_value is not None else None
-        except (TypeError, ValueError):
-            training_load = None
+        if str(activity.get("start_time_local") or "")[:10] < recent_cutoff:
+            continue
+        load = estimate_activity_load(
+            activity,
+            zones_by_activity.get(int(activity["id"])),
+        )
 
         sport = str(activity.get("sport") or "other")
         slot = activity_mix.setdefault(
             sport,
-            {"sessions": 0, "duration_s": 0, "training_load": 0.0},
+            {
+                "sessions": 0,
+                "duration_s": 0,
+                "training_load": 0.0,
+                "aerobic_load": 0.0,
+                "mechanical_load": 0.0,
+                "estimated_sessions": 0,
+            },
         )
         slot["sessions"] += 1
         slot["duration_s"] += round(float(activity.get("duration_s") or 0))
-        if training_load is not None:
-            slot["training_load"] = round(slot["training_load"] + training_load, 1)
+        slot["training_load"] = round(slot["training_load"] + load["load"], 1)
+        slot["aerobic_load"] = round(slot["aerobic_load"] + load["aerobic_load"], 1)
+        slot["mechanical_load"] = round(slot["mechanical_load"] + load["mechanical_load"], 1)
+        slot["estimated_sessions"] += int(load["estimated"])
 
         recent_activities.append(
             {
@@ -334,7 +366,11 @@ def build_context(
                 "duration_s": round(float(activity.get("duration_s") or 0)),
                 "distance_m": round(float(activity.get("distance_m") or 0)),
                 "avg_hr": activity.get("avg_hr"),
-                "garmin_training_load": training_load,
+                "training_load": load["load"],
+                "training_load_source": load["source"],
+                "training_load_confidence": load["confidence"],
+                "aerobic_load": load["aerobic_load"],
+                "mechanical_load": load["mechanical_load"],
             }
         )
 
@@ -556,9 +592,11 @@ def build_context(
             int(activity["duration_s"] or 0) for activity in non_running
         ),
         "non_running_training_load_last_21d": round(
-            sum(float(activity["garmin_training_load"] or 0) for activity in non_running),
+            sum(float(activity["training_load"] or 0) for activity in non_running),
             1,
         ),
+        "multi_sport_heavy_run_impact": multi_sport_load["heavy_run_impact"],
+        "multi_sport_data_quality": multi_sport_load["data_quality"],
         "repeated_heavy_target_misses": repeated_reduction_required,
         "target_miss_evidence": [
             {
@@ -657,6 +695,7 @@ def build_context(
         "recent_days": daily,
         "recent_activity_mix": activity_mix,
         "recent_activities": recent_activities,
+        "multi_sport_load": multi_sport_load,
         "recent_wellness": wellness,
         "recent_weeks": weekly,
         "rules": rules,

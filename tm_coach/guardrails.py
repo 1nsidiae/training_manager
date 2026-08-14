@@ -215,6 +215,30 @@ def validate(
                     )
                 )
 
+    # --- Multi-sportbelasting beschermt de volgende zware run --------------
+    # Garmin telt hier álle sporten mee. Een zware kracht-, fiets-, zwem- of
+    # onbekende sportsessie (bv. padel) mag dus niet verdwijnen omdat ze geen
+    # hardloopkilometers heeft. Bij `protect` is 24–48 uur herstelruimte een
+    # harde plaatsingsregel voor voorstellen; een actief plan verandert nooit
+    # stilzwijgend.
+    multi_sport_load = context.get("multi_sport_load") or {}
+    if multi_sport_load.get("heavy_run_impact") == "protect":
+        protected_until = date.fromisoformat(context["today"]) + timedelta(days=1)
+        for session in sessions:
+            session_day = date.fromisoformat(session["date"])
+            if session_day > protected_until:
+                continue
+            if session.get("sport") == "running" and session.get("session_type") in INTENSITY_TYPES:
+                problems.append(
+                    Violation(
+                        "multi_sport_recovery_spacing",
+                        f"De recente belasting uit alle sporten vraagt 24–48 uur "
+                        f"herstelruimte; {session['session_type']} op {session['date']} "
+                        "staat te dicht op die belasting.",
+                        session["date"],
+                    )
+                )
+
     # --- HR-bovengrens verplicht op rustige sessies -------------------------
     zones = context["athlete"].get("hr_zones") or []
     zone2_high = next((z["high"] for z in zones if z.get("zone") == 2), None)
