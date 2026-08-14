@@ -14,16 +14,20 @@ import { PlanApproval } from "@/components/plan-approval";
 import { PlanImpactCard } from "@/components/plan-impact-card";
 import { PreWorkoutCheckCard } from "@/components/pre-workout-check";
 import { TrainingLoadCard } from "@/components/training-load-card";
+import { WeeklyReviewCard } from "@/components/weekly-review-card";
 import { comparePlans } from "@/lib/plan-comparison";
 import { buildPreWorkoutCheck } from "@/lib/pre-workout";
+import { buildWeeklyReview } from "@/lib/weekly-review";
 import {
   getActivePlan,
+  getActivitiesWindow,
   getAdjustments,
   getAthlete,
   getLastGarminSync,
   getVo2MaxWindow,
   getPlanApplySync,
   getPlanActivitySource,
+  getPlanTrainingFeedback,
   getPlanSessions,
   getPreviousPlan,
   getProposedPlan,
@@ -84,6 +88,10 @@ export default async function TodayPage({
 }) {
   const today = todayInBrussels();
   const selectedDay = validSelectedDay((await searchParams).day, today);
+  const weekStart = mondayOf(new Date(`${selectedDay}T12:00:00`));
+  const weekEnd = new Date(`${weekStart}T12:00:00`);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekEndIso = weekEnd.toISOString().slice(0, 10);
   const [plan, proposed] = await Promise.all([getActivePlan(), getProposedPlan()]);
   const previousPlan = plan ? await getPreviousPlan(plan) : null;
   const [
@@ -101,6 +109,8 @@ export default async function TodayPage({
     impactActivitySource,
     planSync,
     recentFeedback,
+    weekActivities,
+    planFeedback,
   ] =
     await Promise.all([
       plan ? getPlanSessions(plan.id) : Promise.resolve([]),
@@ -119,6 +129,8 @@ export default async function TodayPage({
       plan ? getPlanActivitySource(plan) : Promise.resolve(null),
       plan ? getPlanApplySync(plan.id) : Promise.resolve(null),
       getRecentTrainingFeedback(),
+      getActivitiesWindow(weekStart, weekEndIso),
+      plan ? getPlanTrainingFeedback(plan.id) : Promise.resolve([]),
     ]);
   const proposedChanges = comparePlans(proposedSessions, sessions);
   const latestPlanChanges = comparePlans(sessions, previousSessions);
@@ -134,11 +146,6 @@ export default async function TodayPage({
   const readiness = readinessTone(latest?.training_readiness_score);
   const sleep = sleepTone(latest?.sleep_total_s);
   const hrv = hrvTone(latest?.hrv_status);
-
-  const weekStart = mondayOf(new Date(`${selectedDay}T12:00:00`));
-  const weekEnd = new Date(`${weekStart}T12:00:00`);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndIso = weekEnd.toISOString().slice(0, 10);
 
   const weekSessions = sessions.filter((s) => s.day >= weekStart && s.day <= weekEndIso);
   const plannedKm = weekSessions.reduce((n, s) => n + (s.planned_distance_m ?? 0), 0) / 1000;
@@ -169,6 +176,18 @@ export default async function TodayPage({
     : null;
   const sleepThreshold = rules.sleep_7d_below_threshold?.threshold_h ?? 6;
   const readinessThreshold = rules.readiness_gate_quality?.min_readiness ?? 50;
+  const weeklyReview = buildWeeklyReview({
+    fromDay: weekStart,
+    throughDay: selectedDay,
+    weekEnd: weekEndIso,
+    sessions,
+    activities: weekActivities,
+    feedback: planFeedback,
+    wellness,
+    trainingLoad,
+    sleepThresholdHours: sleepThreshold,
+    readinessThreshold,
+  });
 
   const chips: { text: string; tone: string }[] = [];
   if (sleepAvg != null && sleepAvg < sleepThreshold) {
@@ -224,13 +243,15 @@ export default async function TodayPage({
       />
 
       {proposed ? (
-        <PlanApproval
-          plan={proposed}
-          currentPlan={plan}
-          changes={proposedChanges}
-          adjustments={proposedAdjustments}
-          sessions={proposedSessions}
-        />
+        <div id={proposed.trigger === "weekly_review" ? "weekly-plan-proposal" : undefined}>
+          <PlanApproval
+            plan={proposed}
+            currentPlan={plan}
+            changes={proposedChanges}
+            adjustments={proposedAdjustments}
+            sessions={proposedSessions}
+          />
+        </div>
       ) : null}
 
       <section aria-labelledby="scores-heading">
@@ -462,6 +483,11 @@ export default async function TodayPage({
           </Card>
         </section>
       ) : null}
+
+      <WeeklyReviewCard
+        review={weeklyReview}
+        proposalReady={proposed?.trigger === "weekly_review"}
+      />
 
       <section aria-labelledby="trends-heading">
         <div className="mb-3 flex items-end justify-between">

@@ -179,18 +179,23 @@ export function buildPreWorkoutCheck({
   const crossLoad = trainingLoad.sports
     .filter((item) => item.sport !== "running")
     .reduce((total, item) => total + item.load, 0);
-  const loadHigh = trainingLoad.deltaPct != null && trainingLoad.deltaPct >= 25;
-  const crossLoadHigh = crossLoad >= 40;
+  const loadHigh = trainingLoad.acwr != null && trainingLoad.acwr >= 1.5;
+  const crossLoadHigh = trainingLoad.heavyRunImpact !== "clear";
   signals.push({
     key: "load",
     label: "Trainingsbelasting",
     value: `${decimal(trainingLoad.currentLoad)} load`,
     detail: crossLoadHigh
-      ? `${decimal(crossLoad)} load komt deze week uit andere sporten en telt mee voor herstel.`
+      ? `${decimal(trainingLoad.recentCrossLoad.load)} load uit andere sporten in 48 uur; ${trainingLoad.heavyRunImpact === "protect" ? "bescherm de volgende zware run" : "houd extra herstelruimte"}.`
       : trainingLoad.deltaPct == null
         ? "Nog geen vorige periode om betrouwbaar mee te vergelijken."
         : `${trainingLoad.deltaPct >= 0 ? "+" : ""}${trainingLoad.deltaPct}% tegenover de vorige zeven dagen.`,
-    tone: loadHigh || crossLoadHigh ? "watch" : trainingLoad.currentLoad > 0 ? "neutral" : "good",
+    tone:
+      trainingLoad.heavyRunImpact === "protect" || loadHigh
+        ? "watch"
+        : crossLoadHigh
+          ? "neutral"
+          : trainingLoad.currentLoad > 0 ? "neutral" : "good",
   });
 
   const feedbackFrom = addDays(selectedDay, -21);

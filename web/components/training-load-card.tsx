@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { MetricDelta, type MetricDeltaDirection, type MetricDeltaTone } from "@/components/ui/metric-delta";
 import { duration } from "@/lib/format";
 import type { TrainingLoadSummary } from "@/lib/queries";
+import { trainingLoadSportLabel } from "@/lib/training-load";
 import { cn } from "@/lib/utils";
 
 const SPORT_META: Record<string, { label: string; color: string; text: string }> = {
@@ -13,6 +14,12 @@ const SPORT_META: Record<string, { label: string; color: string; text: string }>
   swimming: { label: "Zwemmen", color: "#00bdd6", text: "text-run-long" },
   walking: { label: "Wandelen", color: "#00f19f", text: "text-teal" },
   strength: { label: "Kracht", color: "#ff6257", text: "text-run-strength" },
+  hiking: { label: "Hiken", color: "#00d6a3", text: "text-teal" },
+  racquet: { label: "Racketsport", color: "#ff9d3d", text: "text-warning" },
+  team_sport: { label: "Teamsport", color: "#ff7a59", text: "text-run-strength" },
+  rowing: { label: "Roeien & peddelen", color: "#33c6c8", text: "text-run-long" },
+  winter_sport: { label: "Wintersport", color: "#9cc9ff", text: "text-recovery" },
+  yoga: { label: "Yoga & mobiliteit", color: "#b99cff", text: "text-run-cross" },
   other: { label: "Overig", color: "#67aee6", text: "text-recovery" },
 };
 
@@ -49,7 +56,8 @@ function comparison(summary: TrainingLoadSummary) {
 export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) {
   const delta = comparison(summary);
   const totalSportLoad = summary.sports.reduce((sum, sport) => sum + sport.load, 0);
-  const chartData: InteractiveBarDatum[] = summary.days.map((day, index) => ({
+  const visibleDays = summary.days.slice(-14);
+  const chartData: InteractiveBarDatum[] = visibleDays.map((day, index) => ({
     id: day.day,
     eyebrow: index < 7 ? "Vorige periode" : "Huidige periode",
     dateLabel: dayLabel(day.day),
@@ -60,11 +68,22 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
     muted: day.load === 0,
   }));
   const dailyAverage = summary.currentLoad / 7;
+  const impact = {
+    clear: { label: "Ruimte voor zware run", text: "text-recovery", detail: "Geen recente niet-loopbelasting die extra herstelruimte vraagt." },
+    watch: { label: "Herstelruimte bewaken", text: "text-warning", detail: "Recente belasting uit andere sporten telt mee vóór je volgende zware run." },
+    protect: { label: "Zware run beschermen", text: "text-danger", detail: "Plan 24–48 uur ruimte na de recente mechanische of aerobe belasting." },
+  }[summary.heavyRunImpact];
+  const qualityLabel = {
+    measured: "Garmin/HR gemeten",
+    mixed: "Gemeten + geschat",
+    estimated: "Op duur geschat",
+    missing: "Nog geen brondata",
+  }[summary.dataQuality];
 
   return (
     <DetailDrawer
       title="Trainingsbelasting"
-      subtitle="Garmin Training Load · laatste 14 dagen"
+      subtitle={`Alle sporten · ${qualityLabel}`}
       triggerClassName="focus-ring block w-full rounded-card text-left"
       trigger={
         <Card className="surface-pressable border-line-strong p-4">
@@ -78,7 +97,7 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
                   <div className="label">Trainingsbelasting · 7 dagen</div>
                   <div className="mt-1.5 flex items-baseline gap-2">
                     <span className="numeral text-[27px] font-bold text-ink">{loadLabel(summary.currentLoad)}</span>
-                    <span className="text-[10px] font-semibold text-faint">Garmin load</span>
+                    <span className="text-[10px] font-semibold text-faint">load</span>
                   </div>
                 </div>
                 <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-faint" />
@@ -86,6 +105,9 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
               <MetricDelta direction={delta.direction} tone={delta.tone} className="mt-2">
                 {delta.label}
               </MetricDelta>
+              {summary.heavyRunImpact !== "clear" ? (
+                <div className={`mt-2 text-[10px] font-semibold ${impact.text}`}>{impact.label}</div>
+              ) : null}
             </div>
           </div>
 
@@ -109,7 +131,7 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
                       className="size-1.5 rounded-full"
                       style={{ background: SPORT_META[sport.sport]?.color ?? SPORT_META.other.color }}
                     />
-                    {SPORT_META[sport.sport]?.label ?? SPORT_META.other.label} {Math.round((sport.load / totalSportLoad) * 100)}%
+                    {trainingLoadSportLabel(sport.sport)} {Math.round((sport.load / totalSportLoad) * 100)}%
                   </span>
                 ))}
               </div>
@@ -123,14 +145,32 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
       }
     >
       <div className="space-y-4 pt-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div className="row p-3">
-            <div className="micro">Huidige 7 dagen</div>
+            <div className="micro">Acute · 7d</div>
             <div className="numeral mt-1.5 text-[22px] text-strain">{loadLabel(summary.currentLoad)}</div>
           </div>
           <div className="row p-3">
-            <div className="micro">Vorige 7 dagen</div>
-            <div className="numeral mt-1.5 text-[22px] text-muted">{loadLabel(summary.previousLoad)}</div>
+            <div className="micro">Chronisch · 28d</div>
+            <div className="numeral mt-1.5 text-[22px] text-recovery">{loadLabel(summary.chronicLoad)}</div>
+          </div>
+          <div className="row p-3">
+            <div className="micro">Ratio</div>
+            <div className="numeral mt-1.5 text-[22px] text-muted">
+              {summary.acwr == null ? "—" : summary.acwr.toFixed(2).replace(".", ",")}
+            </div>
+          </div>
+        </div>
+
+        <div className="row flex items-start justify-between gap-4 p-3">
+          <div>
+            <div className="micro">Impact op zware run</div>
+            <div className={cn("mt-1 text-[12px] font-semibold", impact.text)}>{impact.label}</div>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted">{impact.detail}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="micro">Datakwaliteit</div>
+            <div className="mt-1 text-[10px] font-semibold text-ink">{qualityLabel}</div>
           </div>
         </div>
 
@@ -159,9 +199,10 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
                   <div key={sport.sport} className="row flex items-center gap-3 px-3 py-2.5">
                     <span className="size-2 rounded-full" style={{ background: meta.color }} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold text-ink">{meta.label}</div>
+                      <div className="text-[11px] font-semibold text-ink">{trainingLoadSportLabel(sport.sport)}</div>
                       <div className="mt-0.5 text-[9px] text-faint">
                         {sport.sessions} {sport.sessions === 1 ? "activiteit" : "activiteiten"} · {duration(sport.duration_s)}
+                        {sport.estimatedSessions > 0 ? ` · ${sport.estimatedSessions} op duur geschat` : ""}
                       </div>
                     </div>
                     <div className={cn("numeral text-[16px]", meta.text)}>{loadLabel(sport.load)}</div>
@@ -175,7 +216,7 @@ export function TrainingLoadCard({ summary }: { summary: TrainingLoadSummary }) 
         </section>
 
         <p className="border-t border-line pt-3 text-[10px] leading-relaxed text-faint">
-          Hardloopkilometers sturen je volume-opbouw. Belasting uit zwemmen, fietsen, wandelen en kracht telt wel mee bij herstel en de plaatsing van zware runs.
+          Hardloopkilometers sturen alleen je loopvolume. De belasting van iedere Garmin-sport — ook padel of een nieuw, onbekend sporttype — telt mee voor herstel en de plaatsing van zware runs. Schattingen worden altijd als schatting getoond.
         </p>
       </div>
     </DetailDrawer>

@@ -1,4 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildTrainingLoadSummary,
+  estimateActivityLoad,
+  type LoadActivityRow,
+} from "@/lib/training-load";
+
+export type {
+  HeavyRunImpact,
+  LoadDataQuality,
+  TrainingLoadDay,
+  TrainingLoadSource,
+  TrainingLoadSport,
+  TrainingLoadSummary,
+} from "@/lib/training-load";
+import type { TrainingLoadSource, TrainingLoadSummary } from "@/lib/training-load";
 
 export type SessionType =
   | "rest"
@@ -469,38 +484,6 @@ export type Activity = {
   elevation_gain_m: number | null;
 };
 
-export type TrainingLoadDay = {
-  day: string;
-  load: number;
-};
-
-export type TrainingLoadSport = {
-  sport: string;
-  load: number;
-  duration_s: number;
-  sessions: number;
-};
-
-export type TrainingLoadSource = {
-  id: number;
-  sport: string;
-  sub_sport: string | null;
-  name: string | null;
-  start_time_local: string;
-  duration_s: number;
-  load: number | null;
-};
-
-export type TrainingLoadSummary = {
-  currentLoad: number;
-  previousLoad: number;
-  deltaPct: number | null;
-  currentDurationS: number;
-  days: TrainingLoadDay[];
-  sports: TrainingLoadSport[];
-  lastActivity: TrainingLoadSource | null;
-};
-
 const ACTIVITY_COLUMNS =
   "id, sport, sub_sport, name, start_time_local, distance_m, duration_s, " +
   "avg_hr, max_hr, avg_pace_s_per_km, calories, elevation_gain_m";
@@ -527,6 +510,22 @@ export async function getActivities(limit = 30) {
     .select(ACTIVITY_COLUMNS)
     .order("start_time", { ascending: false })
     .limit(limit);
+  return (data ?? []) as unknown as Activity[];
+}
+
+/** Activiteiten binnen één kalenderperiode. De weekreview gebruikt bewust
+ * alle sporten: een zwemsessie of krachttraining telt als trainingscontext,
+ * ook wanneer alleen hardloopkilometers tegen het loopschema worden gezet. */
+export async function getActivitiesWindow(fromDay: string, throughDay: string) {
+  const end = new Date(`${throughDay}T12:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  const sb = await createClient();
+  const { data } = await sb
+    .from("activities")
+    .select(ACTIVITY_COLUMNS)
+    .gte("start_time_local", fromDay)
+    .lt("start_time_local", end.toISOString().slice(0, 10))
+    .order("start_time_local");
   return (data ?? []) as unknown as Activity[];
 }
 
@@ -577,35 +576,16 @@ export async function getActivityArchiveSummary() {
   };
 }
 
-type LoadActivityRow = {
-  id: number;
-  sport: string;
-  sub_sport: string | null;
-  name: string | null;
-  start_time_local: string;
-  duration_s: number | null;
-  raw: { activityTrainingLoad?: number | string | null } | null;
-};
-
 function addDays(day: string, amount: number) {
   const value = new Date(`${day}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + amount);
   return value.toISOString().slice(0, 10);
 }
 
-function activityLoad(row: LoadActivityRow, zones: Map<number, number[]>) {
-  const rawLoad = Number(row.raw?.activityTrainingLoad ?? 0);
-  if (Number.isFinite(rawLoad) && rawLoad > 0) return rawLoad;
-  return (zones.get(row.id) ?? []).reduce(
-    (total, seconds, index) => total + (seconds / 60) * (index + 1),
-    0,
-  );
-}
-
 /** Dezelfde belastingsberekening als de Python feature-laag, maar uitgesplitst
  * per sport zodat de interface kan laten zien waar de totale belasting vandaan komt. */
 export async function getTrainingLoadSummary(endDay: string): Promise<TrainingLoadSummary> {
-  const fromDay = addDays(endDay, -13);
+  const fromDay = addDays(endDay, -27);
   const untilDay = addDays(endDay, 1);
   const sb = await createClient();
   const { data } = await sb
@@ -629,63 +609,7 @@ export async function getTrainingLoadSummary(endDay: string): Promise<TrainingLo
     }
   }
 
-  const days = Array.from({ length: 14 }, (_, index) => ({
-    day: addDays(fromDay, index),
-    load: 0,
-  }));
-  const dayMap = new Map(days.map((day) => [day.day, day]));
-  const sportMap = new Map<string, TrainingLoadSport>();
-  const currentStart = addDays(endDay, -6);
-  let currentDurationS = 0;
-
-  for (const row of rows) {
-    const day = row.start_time_local.slice(0, 10);
-    const load = activityLoad(row, zoneMap);
-    const point = dayMap.get(day);
-    if (point) point.load += load;
-
-    if (day >= currentStart && day <= endDay) {
-      const slot = sportMap.get(row.sport) ?? {
-        sport: row.sport,
-        load: 0,
-        duration_s: 0,
-        sessions: 0,
-      };
-      slot.load += load;
-      slot.duration_s += Number(row.duration_s) || 0;
-      slot.sessions += 1;
-      currentDurationS += Number(row.duration_s) || 0;
-      sportMap.set(row.sport, slot);
-    }
-  }
-
-  for (const point of days) point.load = Math.round(point.load * 10) / 10;
-  const previousLoad = days.slice(0, 7).reduce((sum, day) => sum + day.load, 0);
-  const currentLoad = days.slice(7).reduce((sum, day) => sum + day.load, 0);
-  const deltaPct = previousLoad > 0
-    ? Math.round(((currentLoad - previousLoad) / previousLoad) * 100)
-    : null;
-  const latest = rows.find((row) => row.start_time_local.slice(0, 10) >= currentStart) ?? null;
-
-  return {
-    currentLoad: Math.round(currentLoad * 10) / 10,
-    previousLoad: Math.round(previousLoad * 10) / 10,
-    deltaPct,
-    currentDurationS: Math.round(currentDurationS),
-    days,
-    sports: [...sportMap.values()]
-      .map((item) => ({ ...item, load: Math.round(item.load * 10) / 10, duration_s: Math.round(item.duration_s) }))
-      .sort((a, b) => b.load - a.load),
-    lastActivity: latest ? {
-      id: latest.id,
-      sport: latest.sport,
-      sub_sport: latest.sub_sport,
-      name: latest.name,
-      start_time_local: latest.start_time_local,
-      duration_s: Math.round(Number(latest.duration_s) || 0),
-      load: Math.round(activityLoad(latest, zoneMap) * 10) / 10,
-    } : null,
-  };
+  return buildTrainingLoadSummary(rows, zoneMap, endDay);
 }
 
 /** Garmin-activiteit die een activity_completed-herplanning activeerde. */
@@ -716,7 +640,7 @@ export async function getPlanActivitySource(plan: Plan): Promise<TrainingLoadSou
     return bLoad - aLoad || Number(b.duration_s ?? 0) - Number(a.duration_s ?? 0);
   })[0];
   if (!source) return null;
-  const load = Number(source.raw?.activityTrainingLoad ?? 0);
+  const estimate = estimateActivityLoad(source);
   return {
     id: source.id,
     sport: source.sport,
@@ -724,7 +648,8 @@ export async function getPlanActivitySource(plan: Plan): Promise<TrainingLoadSou
     name: source.name,
     start_time_local: source.start_time_local,
     duration_s: Math.round(Number(source.duration_s) || 0),
-    load: Number.isFinite(load) && load > 0 ? Math.round(load * 10) / 10 : null,
+    load: estimate.load > 0 ? estimate.load : null,
+    loadSource: estimate.source,
   };
 }
 
@@ -794,6 +719,32 @@ export async function getRecentTrainingFeedback(limit = 6): Promise<RecentTraini
   return feedback.map((item) => ({
     ...item,
     session: item.plan_session_id == null ? null : sessions.get(item.plan_session_id) ?? null,
+  }));
+}
+
+/** Alle zelfrapportages van een plan, gekoppeld aan de trainingsdag. Dit
+ * voorkomt dat een later ingevulde feedback in de verkeerde week belandt. */
+export async function getPlanTrainingFeedback(planId: number): Promise<RecentTrainingFeedback[]> {
+  const sb = await createClient();
+  const { data: sessionRows } = await sb
+    .from("plan_sessions")
+    .select("id, day, title, session_type, status, targets")
+    .eq("plan_id", planId);
+  const sessions = (sessionRows ?? []) as NonNullable<RecentTrainingFeedback["session"]>[];
+  const sessionIds = sessions.map((session) => session.id);
+  if (!sessionIds.length) return [];
+
+  const { data } = await sb
+    .from("session_feedback")
+    .select(
+      "id, plan_session_id, activity_id, pain_score, endurance_score, extra, notes, created_at",
+    )
+    .in("plan_session_id", sessionIds)
+    .order("created_at", { ascending: false });
+  const sessionMap = new Map(sessions.map((session) => [session.id, session]));
+  return ((data ?? []) as SessionFeedback[]).map((item) => ({
+    ...item,
+    session: item.plan_session_id == null ? null : sessionMap.get(item.plan_session_id) ?? null,
   }));
 }
 
