@@ -69,7 +69,7 @@ export default async function ProfilePage() {
 
   return (
     <main className="space-y-5">
-      <AppTopBar title="Profiel" />
+      <AppTopBar title="Profiel" showAvatar={false} />
       <AvatarUpload
         initials={initials}
         signedUrl={avatarUrl}
