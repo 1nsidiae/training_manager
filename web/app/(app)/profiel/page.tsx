@@ -1,10 +1,17 @@
 import { Watch } from "lucide-react";
 import { AppTopBar } from "@/components/app-top-bar";
+import { AvatarUpload } from "@/components/avatar-upload";
 import { PushToggle } from "@/components/push-toggle";
 import { ScreenHeader } from "@/components/screen-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { getAthlete, getFitness, getLastSync, getLatestVo2Max } from "@/lib/queries";
+import {
+  getAthlete,
+  getAvatarUrl,
+  getFitness,
+  getLastSync,
+  getLatestVo2Max,
+} from "@/lib/queries";
 import { ZONE_COLORS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +48,13 @@ export default async function ProfilePage() {
     getLastSync(),
   ]);
 
+  const avatarUrl = await getAvatarUrl(athlete?.avatar_path);
+  const initials = (athlete?.display_name ?? "?")
+    .split(" ")
+    .map((deel: string) => deel[0])
+    .slice(0, 2)
+    .join("");
+
   const syncState = syncStateOf(sync?.status);
   const current = fitness.find((f) => f.scope === "current");
   const historical = fitness.find((f) => f.scope === "historical");
@@ -56,7 +70,13 @@ export default async function ProfilePage() {
   return (
     <main className="space-y-5">
       <AppTopBar title="Profiel" />
-      <ScreenHeader eyebrow="Atleetprofiel" title={athlete?.display_name ?? "Onbekend"} action={<Badge variant="teal" className="mt-1">Garmin</Badge>} />
+      <AvatarUpload
+        initials={initials}
+        signedUrl={avatarUrl}
+        hasAvatar={Boolean(athlete?.avatar_path)}
+      >
+        <ScreenHeader eyebrow="Atleetprofiel" title={athlete?.display_name ?? "Onbekend"} action={<Badge variant="teal" className="mt-1">Garmin</Badge>} />
+      </AvatarUpload>
 
       {/* Hartslagzones: de basis onder elke sessie in dit plan. */}
       <Card className="p-4">

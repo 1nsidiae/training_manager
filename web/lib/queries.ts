@@ -777,10 +777,23 @@ export async function getAthlete() {
   const sb = await createClient();
   const { data } = await sb
     .from("athlete_profile")
-    .select("display_name, max_hr, resting_hr, lactate_threshold_hr, hr_zones, hr_zones_source")
+    .select(
+      "display_name, max_hr, resting_hr, lactate_threshold_hr, hr_zones, hr_zones_source, avatar_path",
+    )
     .limit(1)
     .maybeSingle();
   return data;
+}
+
+/** Een tijdelijke URL voor de profielfoto.
+ *
+ * De bucket is privé, dus er bestaat geen vaste URL. Daarom tekenen we hem per
+ * paginaweergave opnieuw; een opgeslagen URL zou binnen het uur dood zijn. */
+export async function getAvatarUrl(path: string | null | undefined) {
+  if (!path) return null;
+  const sb = await createClient();
+  const { data } = await sb.storage.from("avatars").createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
 }
 
 export async function getLastSync() {
